@@ -107,3 +107,57 @@ panel. The bowl is a real tile at row 5, column 11.
 cup, each of regulars 1 to 4 needs their own line. So regular 2 is the first
 "second line onto the counter", not regular 4 as the table says. Nothing to
 change in the rules. It is a note for the fun check.
+
+## Build tools and screens (steps 2 and 3)
+
+**Q18. Stool columns for regulars 1 to 4.** Spec 5 leaves them to the build.
+*Chosen:* lamplighter 3, chimney sweep 9, clockmaker 5, gargoyle 11
+(`src/levels/regulars.ts`). With one well, each regular takes one side of it.
+The clockmaker's column sits right under the obvious south line, so tick 5
+falls out of a well, a plot and a kettle in a column (the "aha" for serve
+ticks). The gargoyle's column 11 is to the right of the sweep's 9, so a
+timed dark cup cannot be stolen by the any-tick sweep if it joins at column
+10 or 11. Proven by the fixtures in `src/levels/layouts.ts`.
+
+**Q19. Cut, copy, delete and the hand.** *Assumed:* cut and copy put the new
+buffer entry straight into the hand; delete only adds it to the buffer.
+Ctrl+V picks the current entry up again. Ctrl+wheel picks up the current
+entry first, then steps to older ones. Esc or right-click puts the hand down.
+`src/ui/editor.ts`.
+
+**Q20. Placing over things.** *Assumed:* a placement or paste never overwrites
+a tile. A belt drag lays belts on empty tiles only. It turns the belts it
+has just laid so they point along the drag, including the last one, which
+points into whatever machine the drag ends on.
+
+**Q21. Undo when the till cannot pay.** Undoing a delete re-buys the pieces.
+*Assumed:* if the till cannot cover that, the undo is refused with a
+message and stays on the stack. Undo never rewinds the clock.
+
+**Q22. Which tick does the clock show?** The floor shows the result of the tick
+just run. *Assumed:* the dial, the regulars at their stools and the cat all
+read that tick (`T - 1`), not the next one.
+
+**Q23. Counter strip details.** *Assumed:* the four readings are ● Just in
+Time, ◐ within grace (also used for any-tick regulars, who always pay the
+plain price), ✕ a miss, and a faint dot for a column with no stool. For an
+any-tick regular the cell shows the tick their cup arrives. Steady state is
+computed with every walked-in regular seated and milk always paid, and only
+when the layout or the seats change. `src/game/strip.ts`, `src/ui/strip.ts`.
+
+**Q24. Small extras.** "One tick lasts one second at normal speed" implies
+other speeds, so there is a 1×/2×/4× selector. Space toggles pause and
+`.` steps one tick. A "Buy floor row" button exists (Rules 1 and Rules 6
+price a row at 50) but is not needed by any reference layout.
+
+**Q25. Chutes as one piece.** *Assumed:* both ends must be back-room tiles (the
+catch cannot be on the counter). Deleting, cutting or selecting either end
+takes both. A layout with a lone launch or catch is refused.
+`brokenChute` in `src/game/build.ts`.
+
+**Q26. Walk-in generator.** *Assumed:* it rolls once every tick that runs, even
+with an empty shelf, so the sequence depends only on the seed and the
+number of ticks played.
+
+**Q27. Debug flag.** `?debug` unlocks every piece, lifts the well limit and
+starts the till at 9,999. Regulars still arrive in order.

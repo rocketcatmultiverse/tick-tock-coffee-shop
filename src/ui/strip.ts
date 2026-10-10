@@ -1,0 +1,56 @@
+// The counter strip: one cell per counter column, under the floor. Just in
+// Time, within grace, a miss and no stool differ by shape as well as colour.
+
+import { itemGlyph, itemName } from '../sim/items';
+import type { StripCell } from '../game/strip';
+import { PAD, TILE } from './geometry';
+import { el } from './panel';
+
+const SHAPE = { justInTime: '●', grace: '◐', miss: '✕' } as const;
+const WORD = { justInTime: 'Just in Time', grace: 'within grace', miss: 'missed' } as const;
+
+export function shortName(name: string): string {
+  const word = name.replace(/^The /, '');
+  return word[0].toUpperCase() + word.slice(1, 4);
+}
+
+export class StripView {
+  readonly root = el('div', { className: 'strip' });
+  private cells: HTMLDivElement[] = [];
+
+  constructor() {
+    this.root.style.marginLeft = `${PAD + 1}px`;
+    for (let c = 0; c < 12; c++) {
+      const cell = el('div', { className: 'cell' });
+      cell.style.width = `${TILE}px`;
+      this.cells.push(cell);
+      this.root.append(cell);
+    }
+  }
+
+  update(strip: StripCell[] | null): void {
+    this.cells.forEach((cell, col) => {
+      const data = strip?.[col];
+      cell.className = 'cell';
+      cell.replaceChildren();
+      const ticks = data?.cupTicks.length ? `Cup here on ticks ${data.cupTicks.join(', ')}` : 'No cup here in steady state';
+      if (!data?.stool) {
+        cell.classList.add('none');
+        cell.append(el('div', { className: 'shape' }, '·'));
+        cell.title = `Column ${col}: no stool. ${ticks}`;
+        return;
+      }
+      const s = data.stool;
+      cell.classList.add(s.result);
+      const wants = s.def.order.tick === 'any' ? 'any' : `t${s.def.order.tick}`;
+      cell.append(
+        el('div', { className: 'who' }, shortName(s.def.name)),
+        el('div', {}, wants),
+        el('div', { className: 'shape' }, SHAPE[s.result]),
+        el('div', {}, s.item ? itemGlyph(s.item) : '—'),
+      );
+      const on = s.tick !== null ? ` on tick ${s.tick}` : '';
+      cell.title = `${s.def.name}: ${WORD[s.result]}${on}${s.item ? `, ${itemName(s.item)}` : ''}. ${ticks}`;
+    });
+  }
+}

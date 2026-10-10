@@ -1,8 +1,13 @@
 import './style.css';
-import { counterIndex, itemName, structureToken, tileIndex } from '../sim';
-import type { Roast } from '../sim/types';
+import { counterIndex, isPresent, itemName, structureToken, tileIndex } from '../sim';
+import type { Layout, Roast } from '../sim/types';
 import { ALL_PIECES } from '../game/pieces';
 import { Shop } from '../game/shop';
+import { type StripCell, counterStrip } from '../game/strip';
+import { REGULARS } from '../levels/regulars';
+import { catSpot } from './cat';
+import { RegularsPanel } from './regularsPanel';
+import { StripView, shortName } from './strip';
 import { Editor } from './editor';
 import { canvasSize, type Spot } from './geometry';
 import { bindInput } from './input';
@@ -20,9 +25,15 @@ class App {
   private canvas = el('canvas', { className: 'floor' });
   private ctx: CanvasRenderingContext2D;
   private panel: Panel;
+  private stripView = new StripView();
+  private regularsPanel = new RegularsPanel();
+  private notes: string[] = [];
+  /** Steady state is recomputed only when the layout or the seats change. */
+  private stripCache: { layout: Layout; seats: number; strip: StripCell[] | null } | null = null;
 
   constructor(root: HTMLElement, debug: boolean) {
-    this.shop = new Shop({ defs: [], debug });
+    this.shop = new Shop({ defs: REGULARS, debug });
+    this.notes.push(`${REGULARS[0].name} walks in: "${REGULARS[0].intro}"`);
     this.editor = new Editor(this.shop);
     this.ctx = this.canvas.getContext('2d')!;
     this.panel = new Panel(
@@ -53,7 +64,8 @@ class App {
       },
       debug,
     );
-    root.append(el('main', { className: 'floor-wrap' }, this.canvas), this.panel.root);
+    this.panel.extra.append(this.regularsPanel.root);
+    root.append(el('main', { className: 'floor-wrap' }, this.canvas, this.stripView.root), this.panel.root);
     bindInput(this.canvas, this);
     this.schedule();
     this.render();
@@ -84,6 +96,7 @@ class App {
     for (const e of report.events) {
       if (e.type === 'brew') this.readouts.set(e.at, { tick: e.tick, roast: 'roast' in e.item ? e.item.roast : null });
     }
+    this.notes = [...report.notes.map((n) => `${report.T % 12}: ${n}`).reverse(), ...this.notes].slice(0, 8);
     this.render();
   }
 
@@ -93,7 +106,9 @@ class App {
     const { layout, sim } = this.shop;
     if (h.row === -1) {
       const item = sim.belts[counterIndex(layout, h.col)];
-      return `Counter, column ${h.col}${item ? ': ' + itemName(item) : ''}`;
+      const ticks = this.strip()?.[h.col].cupTicks ?? [];
+      const steady = ticks.length ? `in steady state a cup sits here on ticks ${ticks.join(', ')}` : 'no cup here in steady state';
+      return `Counter, column ${h.col}${item ? ': ' + itemName(item) : ''} · ${steady}`;
     }
     const i = tileIndex(h.row, h.col);
     const s = layout.tiles[i];
@@ -104,6 +119,15 @@ class App {
     const ro = this.readouts.get(i);
     if (s?.kind === 'kettle' && ro) parts.push(`last input landed on tick ${ro.tick}${ro.roast ? `: ${ro.roast}` : ''}`);
     return parts.join(' · ');
+  }
+
+  private strip(): StripCell[] | null {
+    const seats = this.shop.seats();
+    const c = this.stripCache;
+    if (c && c.layout === this.shop.layout && c.seats === seats.length) return c.strip;
+    const strip = counterStrip(this.shop.layout, seats, this.shop.defs);
+    this.stripCache = { layout: this.shop.layout, seats: seats.length, strip };
+    return strip;
   }
 
   render(): void {
@@ -117,9 +141,16 @@ class App {
       editor: this.editor,
       hover: this.hover,
       readouts: this.readouts,
-      stools: [],
-      shelf: [],
-      cat: null,
+      stools: this.shop.seats().map((seat, i) => ({
+        col: seat.col,
+        label: shortName(this.shop.defs[i].name).slice(0, 2),
+        // The floor shows the tick just run, so presence is read for that tick.
+        present: this.shop.T > 0 && isPresent(seat, this.shop.T - 1),
+        servedNow: this.shop.lastEvents.some((e) => e.type === 'serve' && e.seat === i),
+        status: this.shop.regulars[i].status,
+      })),
+      shelf: this.shop.shelf,
+      cat: catSpot(Math.max(0, this.shop.T - 1)),
     };
     draw(this.ctx, view);
     const rights = this.shop.rights();
@@ -130,7 +161,7 @@ class App {
       running: this.running,
       speed: this.speed,
       till: this.shop.till,
-      gears: 0,
+      gears: this.shop.gears,
       debug: this.shop.debug,
       spillsThisLoop: this.shop.spillsThisLoop,
       spillsLastLoop: this.shop.spillsLastLoop,
@@ -148,6 +179,8 @@ class App {
       canUndo: this.editor.canUndo,
       canRedo: this.editor.canRedo,
     });
+    this.stripView.update(this.strip());
+    this.regularsPanel.update(this.shop.defs, this.shop.regulars, this.shop.newcomer(), this.notes);
   }
 }
 

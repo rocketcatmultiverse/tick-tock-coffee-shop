@@ -118,3 +118,84 @@ button.active {
   padding-left: 18px;
   color: #444;
 }
+
+.strip {
+  display: flex;
+}
+
+.strip .cell {
+  box-sizing: border-box;
+  height: 78px;
+  border: 2px solid #ccc;
+  margin-right: 0;
+  font-size: 11px;
+  text-align: center;
+  padding-top: 2px;
+  background: #fff;
+}
+
+.strip .cell .who {
+  font-weight: bold;
+}
+
+.strip .cell .shape {
+  font-size: 16px;
+  line-height: 18px;
+}
+
+.strip .cell.none {
+  background: transparent;
+  border: 1px dashed #ddd;
+  color: #bbb;
+}
+
+.strip .cell.justInTime {
+  border: 3px solid #2e9e44;
+  color: #1d6b2e;
+}
+
+.strip .cell.grace {
+  border: 2px dashed #d58a00;
+  color: #8a5a00;
+}
+
+.strip .cell.miss {
+  border: 2px dotted #d0021b;
+  color: #d0021b;
+  background: #fff3f3;
+}
+
+.card {
+  border: 1px solid #cfc9bc;
+  background: #fff;
+  padding: 6px 8px;
+  border-radius: 4px;
+}
+
+.card-name {
+  font-weight: bold;
+}
+
+.intro {
+  font-style: italic;
+  color: #555;
+}
+
+.reg-list,
+.log {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.reg-list .waiting {
+  color: #999;
+}
+
+.reg-list .new {
+  color: #1f6feb;
+}
+
+.log {
+  color: #444;
+  font-size: 12px;
+}
