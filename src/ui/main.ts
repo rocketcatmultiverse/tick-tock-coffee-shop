@@ -2,6 +2,7 @@ import './style.css';
 import { counterIndex, isPresent, itemName, structureToken, tileIndex } from '../sim';
 import type { Layout, Roast } from '../sim/types';
 import { ALL_PIECES } from '../game/pieces';
+import { applyOffline } from '../game/offline';
 import { Shop } from '../game/shop';
 import { type StripCell, counterStrip } from '../game/strip';
 import { REGULARS } from '../levels/regulars';
@@ -13,7 +14,12 @@ import { Editor } from './editor';
 import { canvasSize, type Spot } from './geometry';
 import { bindInput } from './input';
 import { Panel, el } from './panel';
+import { showMorningReport } from './morningReport';
 import { draw, type View } from './render';
+import { clearSave, readSave, writeSave } from './storage';
+
+/** How often the shop is saved while open, in milliseconds. */
+const AUTOSAVE_MS = 2000;
 
 class App {
   readonly shop: Shop;
@@ -40,9 +46,13 @@ class App {
   /** Steady state is recomputed only when the layout or the seats change. */
   private stripCache: { layout: Layout; seats: number; strip: StripCell[] | null } | null = null;
 
+  private resetting = false;
+
   constructor(root: HTMLElement, debug: boolean) {
-    this.shop = new Shop({ defs: REGULARS, debug });
-    this.notes.push(`${REGULARS[0].name} walks in: "${REGULARS[0].intro}"`);
+    const loaded = readSave(REGULARS, debug);
+    this.shop = loaded?.shop ?? new Shop({ defs: REGULARS, debug });
+    this.notes.push(loaded ? 'Welcome back. The floor starts empty and fills again within a loop or two.' : `${REGULARS[0].name} walks in: "${REGULARS[0].intro}"`);
+    const report = loaded ? applyOffline(this.shop, loaded.lastSeen, Date.now()) : null;
     this.editor = new Editor(this.shop);
     this.ctx = this.canvas.getContext('2d')!;
     this.panel = new Panel(
@@ -73,11 +83,36 @@ class App {
       },
       debug,
     );
-    this.panel.extra.append(this.catCard.root, this.regularsPanel.root);
+    const fresh = el('button', { textContent: 'Start a new shop' });
+    fresh.onclick = () => this.startOver();
+    this.panel.extra.append(this.catCard.root, this.regularsPanel.root, el('div', { className: 'row' }, fresh));
     root.append(el('main', { className: 'floor-wrap' }, this.canvas, this.stripView.root), this.panel.root);
     bindInput(this.canvas, this);
+    this.save();
+    window.setInterval(() => this.save(), AUTOSAVE_MS);
+    window.addEventListener('pagehide', () => this.save());
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') this.save();
+    });
+    if (report) {
+      // The clock waits while the morning report is read.
+      this.running = false;
+      const loyalty = new Map(this.shop.regulars.map((r) => [r.id, r.loyalty]));
+      showMorningReport(report, loyalty, () => this.togglePause());
+    }
     this.schedule();
     this.render();
+  }
+
+  private save(): void {
+    if (!this.resetting) writeSave(this.shop);
+  }
+
+  private startOver(): void {
+    if (!window.confirm('Start a new shop? This clears the saved one.')) return;
+    this.resetting = true;
+    clearSave(this.shop.debug);
+    location.reload();
   }
 
   /** The cat's seat, once it has started asking for milk. */

@@ -205,3 +205,24 @@ button.active {
   margin: 4px 6px 4px 0;
   width: 150px;
 }
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.report {
+  background: #fff;
+  border: 1px solid #cfc9bc;
+  border-radius: 6px;
+  padding: 16px 20px;
+  max-width: 460px;
+}
+
+.report h2 {
+  margin-top: 0;
+}

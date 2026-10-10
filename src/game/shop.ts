@@ -78,6 +78,18 @@ export class Shop {
     if (this.defs.length > 0) this.walkIn();
   }
 
+  /** Put back a saved shop: layout, books and regulars. The floor starts empty, on tick 0. */
+  restore(saved: { layout: Layout; till: number; gears: number; catName: string; regulars: RegularState[] }): void {
+    this.layout = saved.layout;
+    this.till = saved.till;
+    this.gears = saved.gears;
+    this.catName = saved.catName;
+    this.regulars = saved.regulars.map((r) => ({ ...r }));
+    this.visitServed = this.regulars.map(() => false);
+    this.shelf = [];
+    this.sim = emptyState(this.layout, this.regulars.length);
+  }
+
   get T(): number {
     return this.sim.T;
   }

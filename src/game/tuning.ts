@@ -62,3 +62,6 @@ export const BOWL_COL = 11;
 
 /** Entries kept in the paste buffer history, newest first (proposed). */
 export const BUFFER_HISTORY = 10;
+
+/** Offline progress stops counting after 3 real days: 3 * 86,400 s / 12 s a loop. */
+export const MAX_OFFLINE_LOOPS = 21600;

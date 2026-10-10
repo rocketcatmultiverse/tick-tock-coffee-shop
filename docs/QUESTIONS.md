@@ -201,3 +201,29 @@ through the normal build rules with only the pieces and wells unlocked by
 that point in the ladder. The step-3 tests that meant "regulars 1 to 4" now
 use the first four definitions explicitly, since the list has grown to
 twelve.
+
+## Persistence (step 6)
+
+**Q32. What a load restores.** The save (Spec 3) holds the layout, till, gears,
+cat's name and regulars, but no floor state. *Assumed:* a loaded shop starts
+on tick 0 with an empty floor. Lines refill within a loop or two. The shelf
+is not saved, and the walk-in generator starts again from its seed.
+`src/game/save.ts`.
+
+**Q33. When it saves.** *Assumed:* every 2 seconds while the page is open,
+and when it is hidden or closed. `lastSeen` is the time of the last save.
+`?debug` uses its own save slot so it never touches the real shop. A "Start
+a new shop" button clears the save; the spec has no way to start over, and
+play-testing needs one. `src/ui/storage.ts`, `src/ui/main.ts`.
+
+**Q34. Milk while away.** The till does not move offline, so pails are never
+charged. *Assumed:* steady state for offline progress lets as many doors
+deliver as the till could have paid for when you left. `src/game/offline.ts`.
+
+**Q35. Offline counts.** *Assumed:* each regular gains `floor(loops away ×
+serves per loop)` loyalty. The clockmaker's gears use the cycle's own split
+of Just in Time (2) and plain (1) cups. Regulars' statuses do not change
+while away, even if the layout would serve a waiting one.
+
+**Q36. The morning report** pauses the clock until it is dismissed, so
+nothing happens unseen on the first ticks back.
