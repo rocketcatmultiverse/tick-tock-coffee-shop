@@ -59,3 +59,6 @@ export const WALK_IN_SEED = 12;
 /** The cat's bowl: against the right-hand wall, in the back row you start with (proposed). */
 export const BOWL_ROW = START_ROWS - 1;
 export const BOWL_COL = 11;
+
+/** Entries kept in the paste buffer history, newest first (proposed). */
+export const BUFFER_HISTORY = 10;

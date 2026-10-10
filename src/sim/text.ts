@@ -102,7 +102,8 @@ export function layoutToText(layout: Layout): string[] {
  */
 export function renderFloor(layout: Layout, state: SimState): string {
   const lines: string[] = [];
-  lines.push(`T=${state.T}  t=${clockTick(state.T)}`);
+  // The floor shows the result of the tick just run, T - 1.
+  lines.push(state.T === 0 ? 'before T=0' : `after T=${state.T - 1}  t=${clockTick(state.T - 1)}`);
   for (let row = layout.rows - 1; row >= 0; row--) {
     const cells: string[] = [];
     for (let col = 0; col < COLS; col++) {
