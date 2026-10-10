@@ -27,7 +27,7 @@ describe('Shop', () => {
     expect(shop.layout.tiles[tileIndex(3, 9)]).toEqual({ kind: 'bowl' });
   });
 
-  it('regulars 1 to 4 arrive strictly in order, each once the one before is served', () => {
+  it('regulars 1 to 4 arrive strictly in order, each once everyone before them is happy', () => {
     const shop = new Shop({ defs: REGULARS.slice(0, 4), debug: true });
     expect(shop.build(layoutChanges('all-four')).ok).toBe(true);
     const arrivals: [number, number][] = [];
@@ -38,7 +38,7 @@ describe('Shop', () => {
     }
     expect(arrivals.map(([, n]) => n), renderFloor(shop.layout, shop.sim)).toEqual([2, 3, 4]);
     expect(shop.regulars.map((r) => r.status)).toEqual(['seated', 'seated', 'seated', 'seated']);
-    // Each arrival follows a serve of the regular before.
+    // One at a time.
     for (let k = 1; k < arrivals.length; k++) expect(arrivals[k][0]).toBeGreaterThan(arrivals[k - 1][0]);
   });
 

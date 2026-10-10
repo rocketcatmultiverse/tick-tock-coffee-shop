@@ -5,6 +5,12 @@ import type { PieceKind } from './pieces';
 
 export const START_COINS = 80;
 
+/**
+ * Full loops in a row with their cup before a regular is happy. The next
+ * regular walks in only when everyone already in is happy (docs/QUESTIONS.md, Q62).
+ */
+export const HAPPY_LOOPS = 3;
+
 /** An any-tick regular counts as waiting once this many ticks pass without a cup (proposed). */
 export const ANY_TICK_WAITING = 24;
 export const START_ROWS = 6;

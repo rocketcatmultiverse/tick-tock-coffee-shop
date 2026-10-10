@@ -290,7 +290,13 @@ class App {
       canRedo: this.editor.canRedo,
     });
     this.stripView.update(this.strip());
-    this.regularsPanel.update(this.shop.defs, this.shop.regulars, this.shop.newcomer(), this.notes);
+    this.regularsPanel.update(
+      this.shop.defs,
+      this.shop.regulars,
+      this.shop.regulars.map((_, i) => this.shop.happiness(i)),
+      this.shop.newcomer(),
+      this.notes,
+    );
   }
 }
 

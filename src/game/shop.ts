@@ -15,6 +15,7 @@ import {
   FLOOR_ROW_PRICE,
   GEARS_JUST_IN_TIME,
   GEARS_PER_CUP,
+  HAPPY_LOOPS,
   JUST_IN_TIME_BONUS,
   MILK_PAIL_PRICE,
   START_COINS,
@@ -50,6 +51,10 @@ export class Shop {
   lastEvents: SimEvent[] = [];
   /** Per walked-in regular: took a cup during their current visit. */
   private visitServed: boolean[] = [];
+  /** Per walked-in regular: full loops in a row with a cup, as of the last loop's end. */
+  private streak: number[] = [];
+  /** Per walked-in regular: took a cup during the current loop. */
+  private servedThisLoop: boolean[] = [];
   /** The till could not cover a pail this loop, so the rest of the order does not come. */
   private milkStopped = false;
 
@@ -70,6 +75,9 @@ export class Shop {
     this.catName = saved.catName;
     this.regulars = saved.regulars.map((r) => ({ ...r }));
     this.visitServed = this.regulars.map(() => false);
+    // Happiness is not saved: after a load everyone earns it again (docs/QUESTIONS.md, Q62).
+    this.streak = this.regulars.map(() => 0);
+    this.servedThisLoop = this.regulars.map(() => false);
     this.sim = emptyState(this.layout, this.regulars.length);
   }
 
@@ -86,10 +94,19 @@ export class Shop {
     return this.regulars.map((_, i) => seatFor(this.defs[i]));
   }
 
-  /** The newest regular, while they wait for their first cup. */
+  /** The newest regular, until they are happy: the one the panel introduces. */
   newcomer(): RegularDef | null {
-    const last = this.regulars[this.regulars.length - 1];
-    return last && last.status === 'new' ? this.defs[this.regulars.length - 1] : null;
+    const i = this.regulars.length - 1;
+    return i >= 0 && !this.isHappy(i) ? this.defs[i] : null;
+  }
+
+  /** Full loops in a row regular `i` has had their cup, up to HAPPY_LOOPS. */
+  happiness(i: number): number {
+    return Math.min(HAPPY_LOOPS, this.streak[i] ?? 0);
+  }
+
+  isHappy(i: number): boolean {
+    return (this.streak[i] ?? 0) >= HAPPY_LOOPS;
   }
 
   tick(): TickReport {
@@ -108,7 +125,6 @@ export class Shop {
     this.sim = next;
 
     let spills = 0;
-    let newcomerSeated = false;
     for (const e of events) {
       switch (e.type) {
         case 'spill':
@@ -121,8 +137,8 @@ export class Shop {
           const reg = this.regulars[e.seat];
           const def = this.defs[e.seat];
           this.visitServed[e.seat] = true;
+          this.servedThisLoop[e.seat] = true;
           reg.loyalty++;
-          if (reg.status === 'new' && e.seat === this.regulars.length - 1) newcomerSeated = true;
           notes.push(this.pay(def, e.item, e.justInTime));
           if (reg.status !== 'seated') notes.push(`${def.name} is seated.`);
           reg.status = 'seated';
@@ -152,7 +168,16 @@ export class Shop {
       }
     });
 
-    if (newcomerSeated && this.regulars.length < this.defs.length) notes.push(this.walkIn());
+    // At each loop's end, count who had their cup; the next regular walks in only when everyone is happy.
+    if (T % LOOP === LOOP - 1) {
+      this.regulars.forEach((_, i) => {
+        const wasHappy = this.isHappy(i);
+        this.streak[i] = this.servedThisLoop[i] ? this.streak[i] + 1 : 0;
+        this.servedThisLoop[i] = false;
+        if (this.isHappy(i) && !wasHappy) notes.push(`${this.defs[i].name} is happy.`);
+      });
+      if (this.regulars.length < this.defs.length && this.regulars.every((_, i) => this.isHappy(i))) notes.push(this.walkIn());
+    }
 
     this.spillsThisLoop += spills;
     this.lastEvents = events;
@@ -200,6 +225,8 @@ export class Shop {
     const def = this.defs[this.regulars.length];
     this.regulars.push({ id: def.id, status: 'new', loyalty: 0 });
     this.visitServed.push(false);
+    this.streak.push(0);
+    this.servedThisLoop.push(false);
     this.sim = adaptState(this.layout, this.layout, this.sim, this.regulars.length);
     const after = this.rights();
     const extra: string[] = [];

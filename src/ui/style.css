@@ -385,6 +385,29 @@ details > summary {
   color: var(--cream);
 }
 
+.pips {
+  display: inline-flex;
+  gap: 3px;
+  vertical-align: middle;
+}
+
+.pip {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid var(--muted);
+}
+
+.pip.on {
+  background: var(--gold);
+  border-color: var(--gold);
+}
+
+.pips.happy .pip {
+  background: var(--leaf);
+  border-color: var(--leaf);
+}
+
 .cat-card {
   display: flex;
   flex-wrap: wrap;

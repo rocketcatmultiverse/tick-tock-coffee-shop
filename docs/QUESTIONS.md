@@ -417,3 +417,17 @@ ticks. Every reference layout already served its timed regulars Just in
 Time, so none changed. `visitOffset` in `src/sim/state.ts`; the strip now
 reads Just in Time, served (any tick) or missed.
 
+**Q62. Newcomers wait for everyone to be happy.** *Your decision, from
+play-testing:* a lucky cup (a later newcomer served by a downstream any-tick
+line) brought newcomers before the current puzzle was solved, twice in a row.
+Now a regular is *happy* after `HAPPY_LOOPS` (3, from "2 to 3 full cycles")
+full loops in a row in which they had their cup. A loop without one starts the
+count again. The next regular walks in only at the end of a loop in which
+every regular already in the shop is happy, and their own count starts on the
+next, full loop. This replaces Rules 5's "the next one does not appear until
+the one before has received at least one cup". *Seated* and *waiting* still
+mean what they did. The panel's "next regular" is now the newest regular who
+is not yet happy, with a meter of pips. *Assumed:* happiness is not saved
+(the save format is unchanged), so after a load everyone earns it again
+before the next newcomer. `Shop.tick` in `src/game/shop.ts`.
+

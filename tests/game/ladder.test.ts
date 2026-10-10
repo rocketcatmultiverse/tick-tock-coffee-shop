@@ -43,7 +43,8 @@ describe('Ladder', () => {
 
     const order: string[] = [];
     let catTookMilk = false;
-    for (let k = 0; k < 12 * 40 && order.length < 12; k++) {
+    // Each newcomer waits for everyone to be happy (HAPPY_LOOPS loops each, docs/QUESTIONS.md Q62).
+    for (let k = 0; k < 12 * 80 && order.length < 12; k++) {
       const before = shop.regulars.map((r) => r.status);
       const { events } = shop.tick();
       shop.regulars.forEach((r, i) => {
