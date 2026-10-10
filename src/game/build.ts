@@ -5,9 +5,17 @@
 
 import type { Layout, RegularDef, Structure } from '../sim/types';
 import { COLS } from '../sim/tuning';
-import { colOf, stepFrom } from '../sim/grid';
+import { colOf, emptyLayout, stepFrom, tileIndex } from '../sim/grid';
 import { ALL_PIECES, PIECE_LABEL, type PieceKind, pieceOf } from './pieces';
-import { PIECE_PRICE, START_PIECES, START_WELL_LIMIT } from './tuning';
+import { BOWL_COL, BOWL_ROW, PIECE_PRICE, START_PIECES, START_WELL_LIMIT } from './tuning';
+
+/** A fresh back room: the feeder down column 0 of every row and the cat's bowl in place. */
+export function startLayout(rows: number): Layout {
+  const layout = emptyLayout(rows);
+  for (let r = 0; r < rows; r++) layout.tiles[tileIndex(r, 0)] = { kind: 'feeder' };
+  layout.tiles[tileIndex(BOWL_ROW, BOWL_COL)] = { kind: 'bowl' };
+  return layout;
+}
 
 export interface BuildRights {
   unlocked: ReadonlySet<PieceKind>;
@@ -62,10 +70,15 @@ export function planBuild(layout: Layout, changes: readonly TileChange[], rights
     before.push(was);
     if (same(was, ch.to)) continue;
     if (was?.kind === 'bowl' || ch.to?.kind === 'bowl') return { ok: false, reason: "The cat's bowl is fixed" };
+    if (was?.kind === 'feeder' || ch.to?.kind === 'feeder' || colOf(ch.index) === 0) {
+      return { ok: false, reason: 'The feeder is fixed' };
+    }
     if (ch.to) {
       const piece = pieceOf(ch.to.kind);
       if (!piece || !rights.unlocked.has(piece)) return { ok: false, reason: `${piece ? PIECE_LABEL[piece] : ch.to.kind} is locked` };
-      if (ch.to.kind === 'door' && colOf(ch.index) !== 0) return { ok: false, reason: 'A back door goes against the left wall' };
+      if (ch.to.kind === 'door' && colOf(ch.index) !== COLS - 1) {
+        return { ok: false, reason: 'The side door goes against the right-hand wall' };
+      }
     }
     cost += tileValue(ch.to) - tileValue(was);
     tiles[ch.index] = ch.to;
@@ -77,6 +90,7 @@ export function planBuild(layout: Layout, changes: readonly TileChange[], rights
   if (wells > rights.wellLimit && wells > wellsBefore) {
     return { ok: false, reason: `Well limit reached (${rights.wellLimit})` };
   }
+  if (tiles.filter((s) => s?.kind === 'door').length > 1) return { ok: false, reason: 'There is only one side door' };
   const broken = brokenChute(next);
   if (broken !== null) return { ok: false, reason: 'A chute needs its launch and its catch' };
   if (cost > till) return { ok: false, reason: `Costs ${cost}, the till holds ${till}` };

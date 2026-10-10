@@ -1,16 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { counterIndex, emptyLayout, tileIndex } from '../../src/sim/grid';
+import { counterIndex, emptyLayout } from '../../src/sim/grid';
 import type { Item, Seat } from '../../src/sim/types';
 import { allOf, floor, runTo, start } from '../helpers';
 
 const ALCHEMIST: Seat = { col: 6, drink: 'espresso', roast: 'dark', tick: 6, grace: 0, fussy: true };
 const RIGHT: Item = { kind: 'espresso', roast: 'dark' };
-const KETTLE = tileIndex(0, 6);
-
+/** Only the feeder puts cups on the counter, so tests place them there directly. */
 function setup() {
-  const layout = emptyLayout(1);
-  layout.tiles[KETTLE] = { kind: 'kettle', out: 'S' };
-  return start(layout, [ALCHEMIST]);
+  return start(emptyLayout(1), [ALCHEMIST]);
+}
+
+/** Put `item` on the counter so it is in front of the alchemist (column 6) on the next tick. */
+function sendIn(run: ReturnType<typeof setup>, item: Item) {
+  run.state.belts[counterIndex(run.layout, 5)] = item;
 }
 
 describe('Fussy', () => {
@@ -18,7 +20,7 @@ describe('Fussy', () => {
     for (const T of [5, 6, 7, 18]) {
       const run = setup();
       runTo(run, T);
-      run.state.pending[KETTLE] = { item: RIGHT, readyAt: T };
+      sendIn(run, RIGHT);
       runTo(run, 30);
       const serves = allOf(run, 'serve').map((e) => [e.T, e.justInTime]);
       expect(serves, floor(run)).toEqual(T % 12 === 6 ? [[T, true]] : []);
@@ -29,9 +31,9 @@ describe('Fussy', () => {
     const run = setup();
     runTo(run, 5);
     // A bucket rides the counter through column 6 on tick 5.
-    run.state.belts[counterIndex(run.layout, 5)] = { kind: 'water' };
-    run.state.pending[KETTLE] = { item: RIGHT, readyAt: 6 };
+    sendIn(run, { kind: 'water' });
     runTo(run, 6);
+    sendIn(run, RIGHT);
     expect(run.state.belts[counterIndex(run.layout, 6)], floor(run)).toEqual({ kind: 'water' });
     runTo(run, 7);
     expect(allOf(run, 'serve'), floor(run)).toEqual([]);
@@ -45,8 +47,9 @@ describe('Fussy', () => {
     const run = setup();
     runTo(run, 4);
     // The bucket passes column 6 on tick 4, two ticks early: no harm done.
-    run.state.belts[counterIndex(run.layout, 5)] = { kind: 'water' };
-    run.state.pending[KETTLE] = { item: RIGHT, readyAt: 6 };
+    sendIn(run, { kind: 'water' });
+    runTo(run, 6);
+    sendIn(run, RIGHT);
     runTo(run, 7);
     expect(allOf(run, 'serve').map((e) => e.T), floor(run)).toEqual([6]);
   });

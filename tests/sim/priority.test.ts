@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { counterIndex, tileIndex } from '../../src/sim/grid';
+import { tileIndex } from '../../src/sim/grid';
 import type { Item } from '../../src/sim/types';
 import { EMPTY, eventsOf, floor, start, tick } from '../helpers';
 
@@ -42,22 +42,7 @@ describe('Priority', () => {
       expect(spills.map((e) => e.item), floor(run)).toEqual(chosen.slice(1).map((s) => s.item));
     });
   }
-
-  it('a cup joining the counter from above knocks off a cup passing along it', () => {
-    const run = start([EMPTY, '. . . . . v . . . . . .']);
-    run.state.belts[tileIndex(0, 5)] = { kind: 'coffee', roast: 'dark' };
-    run.state.belts[counterIndex(run.layout, 4)] = { kind: 'coffee', roast: 'light' };
-    const spills = eventsOf(tick(run), 'spill');
-    expect(run.state.belts[counterIndex(run.layout, 5)], floor(run)).toEqual({ kind: 'coffee', roast: 'dark' });
-    expect(spills.map((e) => e.item), floor(run)).toEqual([{ kind: 'coffee', roast: 'light' }]);
-  });
-
-  it('a machine putting out straight onto the counter loses to the passing cup', () => {
-    const run = start([EMPTY, '. . . . . Kv . . . . . .']);
-    run.state.pending[tileIndex(0, 5)] = { item: { kind: 'coffee', roast: 'dark' }, readyAt: 0 };
-    run.state.belts[counterIndex(run.layout, 4)] = { kind: 'coffee', roast: 'light' };
-    const spills = eventsOf(tick(run), 'spill');
-    expect(run.state.belts[counterIndex(run.layout, 5)], floor(run)).toEqual({ kind: 'coffee', roast: 'light' });
-    expect(spills.map((e) => e.item), floor(run)).toEqual([{ kind: 'coffee', roast: 'dark' }]);
-  });
+  // The two counter cases that were here (a cup joining from above, a machine
+  // putting out onto the counter) no longer apply: docs/ADDENDUM-01.md makes
+  // the feeder the only way in. They live on in counterIntake.test.ts.
 });

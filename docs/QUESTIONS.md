@@ -21,7 +21,7 @@ pail, but `canPayMilk` is one boolean, so "the till covers one pail but not
 two" has no answer. *Assumed:* `canPayMilk` may also be a number, the count of
 pails the till can cover; doors are paid in tile-index order and the rest
 deliver nothing. `StepOpts` in `src/sim/types.ts`, `doorPaid` in
-`src/sim/step.ts`, test in `tests/sim/backDoor.test.ts`.
+`src/sim/step.ts`, test in `tests/sim/backDoor.test.ts`. *Superseded by ADDENDUM-01: there is one side door, and `milkPails` replaced `canPayMilk` (Q42).*
 
 **Q3. Three or more items reaching a mixer on one tick.** Only "two
 ingredients" and "anything alone, and any other pair" are covered.
@@ -66,7 +66,7 @@ partway through a visit. This keeps every layout exactly periodic.
 matching cup to pass their stool each loop". *Assumed:* the loop is clock
 ticks 0 to 11. Their visit resets on tick 0, and at the end of tick 11 an
 unserved seated regular goes to waiting. `visitOffset` in
-`src/sim/state.ts`.
+`src/sim/state.ts`. *Superseded by ADDENDUM-01: any-tick regulars no longer reset on tick 0; they wait ANY_TICK_WAIT ticks after each cup.*
 
 **Q10. The data model needed a few more pieces.** `SimState.blocked` (per seat,
 for fussy refusals and the bolted cat). Events: `water` (a plot started
@@ -94,14 +94,14 @@ pays the normal price, and so does the cup that re-seats a waiting regular.
 
 **Q14. Half price of an odd price.** A coffee is 5. *Assumed:* walk-ins pay half,
 rounded down (2 for a coffee). Warm milk's 6 "sold from the shelf only" is
-read as its full price, so a walk-in pays 3. `src/game/tuning.ts`.
+read as its full price, so a walk-in pays 3. `src/game/tuning.ts`. *Superseded by ADDENDUM-01: the shelf and walk-ins are gone, and warm milk has no price.*
 
 **Q15. Shelf staleness counting.** *Assumed:* a cup shelved on tick T can be
-bought on ticks T to T+5 and spills on T+6.
+bought on ticks T to T+5 and spills on T+6. *Superseded by ADDENDUM-01: the shelf is gone.*
 
 **Q16. The till is not a tile.** "Pre-placed, cannot be removed" reads like a
 floor piece, but nothing else places it. *Assumed:* it lives in the side
-panel. The bowl is a real tile at row 5, column 11.
+panel. The bowl is a real tile at row 5, column 11. *Superseded by ADDENDUM-01: the bowl is at row 3, column 9.*
 
 **Q17. Teaching notes for regulars 2 and 4.** With one well and one plot per
 cup, each of regulars 1 to 4 needs their own line. So regular 2 is the first
@@ -117,7 +117,7 @@ The clockmaker's column sits right under the obvious south line, so tick 5
 falls out of a well, a plot and a kettle in a column (the "aha" for serve
 ticks). The gargoyle's column 11 is to the right of the sweep's 9, so a
 timed dark cup cannot be stolen by the any-tick sweep if it joins at column
-10 or 11. Proven by the fixtures in `src/levels/layouts.ts`.
+10 or 11. Proven by the fixtures in `src/levels/layouts.ts`. *Superseded by ADDENDUM-01: stool columns and ticks come from the ladder table.*
 
 **Q19. Cut, copy, delete and the hand.** *Assumed:* cut and copy put the new
 buffer entry straight into the hand; delete only adds it to the buffer.
@@ -143,7 +143,7 @@ Time, ◐ within grace (also used for any-tick regulars, who always pay the
 plain price), ✕ a miss, and a faint dot for a column with no stool. For an
 any-tick regular the cell shows the tick their cup arrives. Steady state is
 computed with every walked-in regular seated and milk always paid, and only
-when the layout or the seats change. `src/game/strip.ts`, `src/ui/strip.ts`.
+when the layout or the seats change. `src/game/strip.ts`, `src/ui/strip.ts`. *Superseded by ADDENDUM-01: the strip also shows each stool's slot (Q51).*
 
 **Q24. Small extras.** "One tick lasts one second at normal speed" implies
 other speeds, so there is a 1×/2×/4× selector. Space toggles pause and
@@ -157,7 +157,7 @@ takes both. A layout with a lone launch or catch is refused.
 
 **Q26. Walk-in generator.** *Assumed:* it rolls once every tick that runs, even
 with an empty shelf, so the sequence depends only on the seed and the
-number of ticks played.
+number of ticks played. *Superseded by ADDENDUM-01: the walk-in generator is gone.*
 
 **Q27. Debug flag.** `?debug` unlocks every piece, lifts the well limit and
 starts the till at 9,999. Regulars still arrive in order.
@@ -173,7 +173,7 @@ layout):
   no dark coffee passes the sweep before his;
 - the two light-coffee regulars never see each other's cup inside their
   windows;
-- nothing passes the fussy alchemist's tile on tick 5.
+- nothing passes the fussy alchemist's tile on tick 5. *Superseded by ADDENDUM-01: stool columns come from the ladder table.*
 
 **Q29. The cat as slot 10.** *Assumed:* the cat is a regular definition with
 `bowl: true`, served at the bowl instead of a stool, paying nothing. It
@@ -193,7 +193,7 @@ column 1 and joins the counter there. Each cup arrives on a different tick of
 the loop, so cups never collide on the shared bus, and each rides to its own
 stool. It uses 3 wells, 3 back doors, 2 roasters, 2 mixers and 1 chute, and
 buys 18 floor rows (24 rows deep). Five of the nine timed regulars are served
-Just in Time and the rest within grace.
+Just in Time and the rest within grace. *Superseded by ADDENDUM-01: that layout broke under the feeder rule; see Q48.*
 
 **Q31. Fixture checks.** Each reference layout now states how many floor rows
 it buys and which regulars it serves Just in Time. The test also builds it
@@ -208,7 +208,7 @@ twelve.
 cat's name and regulars, but no floor state. *Assumed:* a loaded shop starts
 on tick 0 with an empty floor. Lines refill within a loop or two. The shelf
 is not saved, and the walk-in generator starts again from its seed.
-`src/game/save.ts`.
+`src/game/save.ts`. *Superseded by ADDENDUM-01: there is no shelf to save.*
 
 **Q33. When it saves.** *Assumed:* every 2 seconds while the page is open,
 and when it is hidden or closed. `lastSeen` is the time of the last save.
@@ -227,3 +227,87 @@ while away, even if the layout would serve a waiting one.
 
 **Q36. The morning report** pauses the clock until it is dismissed, so
 nothing happens unseen on the first ticks back.
+
+## Addendum 1: the feeder belt and slots
+
+**Q37. Where is the visuals canvas?** The brief describes it as `canvas.json`
+and `*.dc.html` artboards. Neither exists anywhere in the repo. What arrived is
+`docs/Tick Tock Coffee Shop visuals.html` (a single bundled export) and a PDF
+render beside it. *Assumed:* those two files are the canvas; CLAUDE.md points
+at them. Palette and look only, never rules.
+
+**Q38. Where does an item aimed at the counter by anything but the feeder
+spill?** "Spills, as it would at a wall". *Assumed:* on its source tile, as a
+wall spill does. `aim` and `feedsCounter` in `src/sim/step.ts`.
+
+**Q39. What runs off the end of the counter.** "An item that runs off the end
+still raises the `end` event". *Assumed:* unchanged from before: a drink raises
+`end`, anything else raises `spill`. The game counts both as spills, and the
+renderer splashes both. `src/sim/step.ts`, `Shop.tick`.
+
+**Q40. Splitter edge cases.** *Assumed:* a chute launch whose direction faces
+the splitter is not an output, since it "points at the splitter" (its item
+would jump over it anyway). The cat's bowl is an output: it takes items like a
+machine. The counter never is: it takes items from the feeder only. The count
+restarts at the start of the tick whose clock reads 0, so an item leaving on
+tick 0 goes to the first output. An item that spills for want of an output is
+not counted. `splitterOutputs` and the move step in `src/sim/step.ts`.
+
+**Q41. Where a spring keeps its items.** In `SimState.springs`, one place per
+tick of delay, never in `belts`. An empty spring is stored as nothing, so
+equal floors compare equal for steady state. `src/sim/step.ts`.
+
+**Q42. Paying for the milk order.** *Assumed:* each pail is decided on its own
+tick. If the till cannot cover it, that pail and the rest of the loop's order
+do not come, even if coins arrive later in the loop. The order counts milk
+drinkers who have walked in (the cat, the innkeeper, the mayor), in `?debug`
+too. `Shop.milkPails` in `src/game/shop.ts`. Offline progress lets the door
+deliver as many pails of the order as the till could pay for when you left.
+
+**Q43. When an any-tick regular starts waiting.** "Once 24 ticks have passed
+since their last cup". *Assumed:* at the end of the first tick T with
+T - lastCup >= 24 (`ANY_TICK_WAITING` in `src/game/tuning.ts`). The simulator
+records `lastServedAt` for every seat; only any-tick seats use it.
+
+**Q44. Steady state with the new state.** The any-tick wait only asks whether
+ANY_TICK_WAIT ticks have passed, so the state key caps each seat's age there
+(exactly equivalent). Splitter counts are left out of the key: states are only
+compared on tick 0, where the counts restart. `stateKey` in `src/sim/steady.ts`.
+
+**Q45. "The same drink" for any-tick seating.** *Assumed:* the same drink and
+roast, since a regular only takes their own roast. The lamplighter (medium)
+sits right of the clockmaker and the postwoman; the sweep (dark) right of the
+gargoyle. `tests/levels/slots.test.ts`.
+
+**Q46. The cat's `col`.** `RegularDef` needs one, and the ladder table says "at
+its bowl". *Assumed:* the bowl's column, 9. Nothing reads it.
+
+**Q47. Saves from before the addendum.** Their layouts have no feeder and the
+bowl at row 5, column 11. *Assumed:* the loader refuses them and a new shop
+starts; the save version stays 1. Persistence was only changed so it still
+compiles and validates the new pieces. `src/game/save.ts`.
+
+**Q48. Fixtures broken by the addendum.** CLAUDE.md treats a broken fixture as
+a finding. Every step 1 to 5 reference layout breaks under the addendum:
+- the side door: the cat, innkeeper, mayor and all-twelve layouts all used a
+  back door on the left wall;
+- counter intake: every other layout (lamplighter, sweep, clockmaker, gargoyle,
+  all-four, postwoman, baker, apothecary, witch, alchemist) put its cups on the
+  counter away from column 0, never through a feeder.
+The addendum replaces them. Its layout for places 1 to 4 is the fixture for
+all four (it replaces the four single layouts), and the milk corner is the
+fixture for the order. Places 5 to 12 and the all-twelve layout are owed by
+step 5.
+
+**Q49. Intro lines.** The clockmaker's and the mayor's intros named their old
+ticks. *Changed:* "ninth" and "eleventh". Text only.
+
+**Q50. What the ghost says over the feeder.** *Assumed:* "The feeder is fixed"
+for a piece or a paste that would land on it, and for any change to column 0.
+
+**Q51. How slots are shown.** Feeder and counter tiles show the slot passing
+over them on the tick just run, which is the tick the clock shows (Q22). Under
+each stool: "slot N", or "any·N" for an any-tick regular, with N the slot of
+the last cup they actually took. The strip reads "t9 s9", or "any s7" with
+the any-tick slot from steady state.
+

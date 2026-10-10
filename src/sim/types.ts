@@ -1,4 +1,5 @@
-// Core data model for the simulator. See docs/SPEC.md, "Spec 3: data model".
+// Core data model for the simulator. See docs/SPEC.md, "Spec 3: data model",
+// as amended by docs/ADDENDUM-01.md, "Changes for the build".
 
 export type Dir = 'N' | 'E' | 'S' | 'W';
 export type Roast = 'light' | 'medium' | 'dark';
@@ -25,7 +26,10 @@ export type Structure =
   | { kind: 'kettle'; out: Dir }
   | { kind: 'mixer'; out: Dir }
   | { kind: 'bowl' } // the cat's bowl: pre-placed, cannot be removed
-  | { kind: 'door' }; // leftmost column only, always faces right
+  | { kind: 'door' } // the side door: column 11 only, faces left, at most one
+  | { kind: 'feeder' } // column 0 only, pre-placed in every row, flows toward the counter, cannot be removed
+  | { kind: 'spring'; dir: Dir } // an item crosses it in SPRING_TICKS ticks instead of 1
+  | { kind: 'splitter' }; // hands each item to the next of its outputs, clockwise from the top
 
 export type StructureKind = Structure['kind'];
 
@@ -45,7 +49,7 @@ export interface Seat {
   col: number; // counter column the stool faces
   drink: Drink;
   roast: Roast | 'any';
-  tick: number | 'any'; // 'any' = the first matching cup each loop
+  tick: number | 'any'; // 'any' = takes the first matching cup, then nothing for ANY_TICK_WAIT ticks
   grace: number; // ticks they stay after their own tick, 0 to 3
   fussy?: boolean; // refuses their cup if anything was on their tile the tick before
   bowl?: number; // the cat only: back-room tile of its bowl, used instead of col
@@ -59,6 +63,9 @@ export interface SimState {
   roasting: Record<number, { since: number } | null>; // roaster batches: the tick the beans landed
   servedThisVisit: boolean[]; // per seat: set when they take a cup, cleared when they leave
   blocked: boolean[]; // per seat: a fussy regular saw a busy tile, or the cat bolted; cleared when they leave
+  lastServedAt: (number | null)[]; // per seat: T of their last cup; drives the any-tick wait
+  springs: Record<number, (Item | null)[]>; // by tile index: the items inside, one place per tick of delay
+  splitters: Record<number, number>; // by tile index: items passed since tick 0; picks the next output
 }
 
 export type SimEvent =
@@ -73,7 +80,7 @@ export type SimEvent =
   | { type: 'serve'; seat: number; at: number; item: Item; justInTime: boolean }
   | { type: 'refuse'; seat: number; at: number; item: Item } // a fussy regular turned down the right cup
   | { type: 'bolt'; seat: number; at: number } // plain milk scared the cat off the bowl
-  | { type: 'end'; item: Item }; // a drink ran off the end of the counter untaken
+  | { type: 'end'; item: Item }; // a drink ran off the end of the counter untaken; the game counts it as a spill
 
 /** A regular's definition. Lives here so that `src/levels/` can import it as a type. */
 export interface RegularDef {
@@ -96,9 +103,6 @@ export interface RegularDef {
 
 export interface StepOpts {
   seats: Seat[];
-  /**
-   * Whether back doors deliver this tick. A number is how many pails the till
-   * can cover; doors are paid in tile order. See docs/QUESTIONS.md (Q2).
-   */
-  canPayMilk: boolean | number;
+  /** Pails the side door delivers this loop, one a tick from MILK_TICK; the game layer works it out. */
+  milkPails: number;
 }

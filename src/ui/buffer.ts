@@ -22,6 +22,7 @@ function mapDir(s: Structure, f: (d: Dir) => Dir): Structure {
     case 'belt':
     case 'launch':
     case 'catch':
+    case 'spring':
       return { ...s, dir: f(s.dir) };
     case 'plot':
     case 'kettle':
@@ -84,6 +85,7 @@ export function pasteChanges(layout: Layout, entry: Entry, row: number, col: num
     const k = col + c.dc;
     if (r < 0 || r >= layout.rows || k < 0 || k >= COLS) return 'Off the floor';
     const index = tileIndex(r, k);
+    if (layout.tiles[index]?.kind === 'feeder') return 'The feeder is fixed';
     if (layout.tiles[index]) return 'Overlaps something';
     out.push({ index, to: c.s });
   }

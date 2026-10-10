@@ -5,11 +5,10 @@ import { COLS } from '../sim/tuning';
 
 export const TILE = 48;
 export const PAD = 8;
-export const SHELF_W = TILE * 2;
-export const STOOL_H = 44;
+export const STOOL_H = 54;
 
 export function canvasSize(rows: number): { w: number; h: number } {
-  return { w: PAD * 2 + COLS * TILE + SHELF_W, h: PAD * 2 + (rows + 1) * TILE + STOOL_H };
+  return { w: PAD * 2 + COLS * TILE, h: PAD * 2 + (rows + 1) * TILE + STOOL_H };
 }
 
 /** Top-left pixel of a tile. Row -1 is the counter. */

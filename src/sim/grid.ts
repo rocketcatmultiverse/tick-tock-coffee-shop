@@ -38,6 +38,20 @@ export function clockTick(T: number): number {
   return ((T % LOOP) + LOOP) % LOOP;
 }
 
+/**
+ * The slot a cup rides in: the clock tick on which it steps onto counter
+ * column 0 (docs/ADDENDUM-01.md, "Slots"). A cup in front of counter column
+ * `col` on tick `tick` rides in slot (tick - col) mod 12. Derived, never stored.
+ */
+export function slotOf(tick: number, col: number): number {
+  return clockTick(tick - col);
+}
+
+/** The slot of a cup on the feeder in back-room row `row` on tick `tick`. */
+export function feederSlot(tick: number, row: number): number {
+  return clockTick(tick + row + 1);
+}
+
 export function tileIndex(row: number, col: number): number {
   return row * COLS + col;
 }

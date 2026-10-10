@@ -1,5 +1,6 @@
 import './style.css';
-import { counterIndex, isPresent, itemName, structureToken, tileIndex } from '../sim';
+import { counterIndex, feederSlot, isPresent, itemName, slotOf, structureToken, tileIndex } from '../sim';
+import { MILK_TICK } from '../sim/tuning';
 import type { Layout, Roast } from '../sim/types';
 import { ALL_PIECES } from '../game/pieces';
 import { applyOffline } from '../game/offline';
@@ -171,7 +172,7 @@ class App {
       const item = sim.belts[counterIndex(layout, h.col)];
       const ticks = this.strip()?.[h.col].cupTicks ?? [];
       const steady = ticks.length ? `in steady state a cup sits here on ticks ${ticks.join(', ')}` : 'no cup here in steady state';
-      return `Counter, column ${h.col}${item ? ': ' + itemName(item) : ''} · ${steady}`;
+      return `Counter, column ${h.col}, slot ${slotOf(this.shop.T - 1, h.col)} passing${item ? ': ' + itemName(item) : ''} · ${steady}`;
     }
     const i = tileIndex(h.row, h.col);
     const s = layout.tiles[i];
@@ -180,11 +181,28 @@ class App {
     if (s) parts.push(`${s.kind} (${structureToken(s)})`);
     if (item) parts.push(`holding ${itemName(item)}`);
     if (s?.kind === 'bowl') parts.push(this.catSeat() >= 0 ? 'the cat wants warm milk here on ticks 10 to 1' : 'the cat is not asking yet');
+    if (s?.kind === 'feeder') parts.push(`the only way onto the counter; slot ${feederSlot(this.shop.T - 1, h.row)} is passing`);
     const cat = this.catAt();
     if (cat.row === h.row && cat.col === h.col) parts.push(`${this.shop.catName || 'your cat'} (click to name or pet)`);
     const ro = this.readouts.get(i);
     if (s?.kind === 'kettle' && ro) parts.push(`last input landed on tick ${ro.tick}${ro.roast ? `: ${ro.roast}` : ''}`);
     return parts.join(' · ');
+  }
+
+  /** The slot a stool wants; an any-tick stool shows "any", then the slot it last took a cup from. */
+  private stoolSlot(i: number): string {
+    const seat = this.shop.seats()[i];
+    if (seat.tick !== 'any') return `slot ${slotOf(seat.tick, seat.col)}`;
+    const last = this.shop.sim.lastServedAt[i];
+    return last === null ? 'any' : `any·${slotOf(last, seat.col)}`;
+  }
+
+  /** The milk order: how many pails, and from which tick. */
+  private milkInfo(): string {
+    const n = this.shop.milkOrder();
+    if (n === 0) return 'Milk order: none yet';
+    const ticks = n === 1 ? `tick ${MILK_TICK}` : `ticks ${MILK_TICK} to ${MILK_TICK + n - 1}`;
+    return `Milk order: ${n} pail${n === 1 ? '' : 's'} a loop through the side door, on ${ticks}`;
   }
 
   private strip(): StripCell[] | null {
@@ -214,12 +232,12 @@ class App {
         .map(({ seat, i }) => ({
           col: seat.col,
           label: shortName(this.shop.defs[i].name).slice(0, 2),
+          slot: this.stoolSlot(i),
           // The floor shows the tick just run, so presence is read for that tick.
           present: this.shop.T > 0 && isPresent(seat, this.shop.T - 1),
           servedNow: this.shop.lastEvents.some((e) => e.type === 'serve' && e.seat === i),
           status: this.shop.regulars[i].status,
         })),
-      shelf: this.shop.shelf,
       cat: { spot: this.catAt(), heart: this.catCard.heart, mad: this.catMad() },
     };
     draw(this.ctx, view);
@@ -235,6 +253,7 @@ class App {
       debug: this.shop.debug,
       spillsThisLoop: this.shop.spillsThisLoop,
       spillsLastLoop: this.shop.spillsLastLoop,
+      milk: this.milkInfo(),
       palette: ALL_PIECES.map((piece) => ({
         piece,
         locked: !rights.unlocked.has(piece),

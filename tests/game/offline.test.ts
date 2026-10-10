@@ -12,7 +12,7 @@ const SECOND = 1000;
 function allFourShop(): Shop {
   const shop = new Shop({ defs: REGULARS.slice(0, 4), debug: true });
   const layout = parseLayout(REFERENCE_LAYOUTS.find((r) => r.id === 'all-four')!.rows);
-  shop.build(layout.tiles.flatMap((to, index) => (to && to.kind !== 'bowl' ? [{ index, to }] : [])));
+  shop.build(layout.tiles.flatMap((to, index) => (to && to.kind !== 'bowl' && to.kind !== 'feeder' ? [{ index, to }] : [])));
   for (let k = 0; k < 12 * 12; k++) shop.tick();
   return shop;
 }

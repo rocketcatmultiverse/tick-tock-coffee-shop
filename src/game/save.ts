@@ -48,6 +48,7 @@ function isStructure(s: unknown): s is Structure {
     case 'belt':
     case 'launch':
     case 'catch':
+    case 'spring':
       return DIRS.has(o.dir as Dir);
     case 'plot':
     case 'roaster':
@@ -57,6 +58,8 @@ function isStructure(s: unknown): s is Structure {
     case 'well':
     case 'bowl':
     case 'door':
+    case 'feeder':
+    case 'splitter':
       return true;
     default:
       return false;
@@ -74,6 +77,8 @@ function isSave(data: unknown, defs: readonly RegularDef[]): data is Save {
   if (!Array.isArray(layout.tiles) || layout.tiles.length !== layout.rows * COLS) return false;
   if (!layout.tiles.every((t) => t === null || isStructure(t))) return false;
   if (layout.tiles[tileIndex(BOWL_ROW, BOWL_COL)]?.kind !== 'bowl') return false;
+  // The feeder runs down column 0 of every row, and nowhere else.
+  if (!layout.tiles.every((t, i) => (t?.kind === 'feeder') === (i % COLS === 0))) return false;
   if (typeof d.till !== 'number' || !Number.isFinite(d.till)) return false;
   if (!isCount(d.gears) || typeof d.catName !== 'string' || typeof d.lastSeen !== 'number') return false;
   const regs = d.regulars;

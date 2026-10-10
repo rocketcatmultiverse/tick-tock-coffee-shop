@@ -1,20 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { counterIndex, emptyLayout, tileIndex } from '../../src/sim/grid';
+import { counterIndex, emptyLayout } from '../../src/sim/grid';
 import type { Item, Seat } from '../../src/sim/types';
 import { allOf, floor, runTo, start } from '../helpers';
 
 const SEAT: Seat = { col: 6, drink: 'coffee', roast: 'medium', tick: 5, grace: 2 };
 const RIGHT: Item = { kind: 'coffee', roast: 'medium' };
-const KETTLE = tileIndex(0, 6);
-
-/** A kettle straight above the stool puts each cup in front of it on the given T. */
+/**
+ * Each cup is put on the counter one column short of the stool, so it is in
+ * front of the stool on the given T. Only the feeder can put a cup on the
+ * counter (docs/ADDENDUM-01.md), so the test places it there directly.
+ */
 function serveAt(cups: [number, Item][], seat: Seat = SEAT) {
-  const layout = emptyLayout(1);
-  layout.tiles[KETTLE] = { kind: 'kettle', out: 'S' };
-  const run = start(layout, [seat]);
+  const run = start(emptyLayout(1), [seat]);
   for (const [T, item] of cups) {
     runTo(run, T);
-    run.state.pending[KETTLE] = { item, readyAt: T };
+    run.state.belts[counterIndex(run.layout, seat.col - 1)] = item;
   }
   runTo(run, 40);
   return run;
@@ -37,7 +37,7 @@ describe('Stool', () => {
   }
 
   for (const T of [4, 8, 11, 12]) {
-    it(`lets the right drink go by outside their window (T=${T}), and it reaches the shelf`, () => {
+    it(`lets the right drink go by outside their window (T=${T}), and it runs off the end`, () => {
       const run = serveAt([[T, RIGHT]]);
       expect(allOf(run, 'serve'), floor(run)).toEqual([]);
       expect(allOf(run, 'end').map((e) => [e.T, e.item]), floor(run)).toEqual([[T + 6, RIGHT]]);
@@ -60,22 +60,7 @@ describe('Stool', () => {
     expect(allOf(run, 'end').map((e) => e.T), floor(run)).toEqual([12]);
   });
 
-  it('an any-tick regular takes the first matching cup each loop, at the plain price', () => {
-    const any: Seat = { col: 6, drink: 'coffee', roast: 'medium', tick: 'any', grace: 0 };
-    const run = serveAt(
-      [
-        [2, RIGHT],
-        [9, RIGHT],
-        [13, RIGHT],
-      ],
-      any,
-    );
-    expect(allOf(run, 'serve').map((e) => [e.T, e.justInTime]), floor(run)).toEqual([
-      [2, false],
-      [13, false],
-    ]);
-    expect(allOf(run, 'end').map((e) => e.T), floor(run)).toEqual([15]);
-  });
+  // Any-tick regulars follow their own rule now (docs/ADDENDUM-01.md): see anyTick.test.ts.
 
   it('a regular whose roast is any takes every roast', () => {
     const anyRoast: Seat = { ...SEAT, roast: 'any' };

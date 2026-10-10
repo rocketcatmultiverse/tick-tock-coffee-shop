@@ -42,7 +42,9 @@ export class StripView {
       }
       const s = data.stool;
       cell.classList.add(s.result);
-      const wants = s.def.order.tick === 'any' ? 'any' : `t${s.def.order.tick}`;
+      // Wanted tick and slot; an any-tick regular shows "any", then the slot they last took from.
+      const wants =
+        s.def.order.tick === 'any' ? `any${s.slot !== null ? ' s' + s.slot : ''}` : `t${s.def.order.tick} s${s.slot}`;
       cell.append(
         el('div', { className: 'who' }, shortName(s.def.name)),
         el('div', {}, wants),
@@ -50,7 +52,8 @@ export class StripView {
         el('div', {}, s.item ? itemGlyph(s.item) : '—'),
       );
       const on = s.tick !== null ? ` on tick ${s.tick}` : '';
-      cell.title = `${s.def.name}: ${WORD[s.result]}${on}${s.item ? `, ${itemName(s.item)}` : ''}. ${ticks}`;
+      const slot = s.slot !== null ? ` Slot ${s.slot}.` : '';
+      cell.title = `${s.def.name}: ${WORD[s.result]}${on}${s.item ? `, ${itemName(s.item)}` : ''}.${slot} ${ticks}`;
     });
   }
 }

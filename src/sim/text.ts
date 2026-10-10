@@ -3,8 +3,9 @@
 //
 //   .   empty          > < ^ v   belt E W N S
 //   W   well           Px  plot facing x       Kx  kettle facing x
-//   D   back door      Rx  roaster facing x    Mx  mixer facing x
+//   D   side door      Rx  roaster facing x    Mx  mixer facing x
 //   B   cat's bowl     Lx  chute launch        Cx  chute catch
+//   F   feeder         Sx  spring facing x     Y   splitter
 //
 // where x is one of > < ^ v.
 
@@ -22,6 +23,8 @@ export function parseToken(token: string): Structure | null {
   if (token === 'W') return { kind: 'well' };
   if (token === 'D') return { kind: 'door' };
   if (token === 'B') return { kind: 'bowl' };
+  if (token === 'F') return { kind: 'feeder' };
+  if (token === 'Y') return { kind: 'splitter' };
   const head = token[0];
   const d = ARROW_TO_DIR[token.slice(1)];
   if (token.length === 2 && d) {
@@ -38,6 +41,8 @@ export function parseToken(token: string): Structure | null {
         return { kind: 'launch', dir: d };
       case 'C':
         return { kind: 'catch', dir: d };
+      case 'S':
+        return { kind: 'spring', dir: d };
     }
   }
   throw new Error(`Unknown layout token "${token}"`);
@@ -54,6 +59,12 @@ export function structureToken(s: Structure | null): string {
       return 'D';
     case 'bowl':
       return 'B';
+    case 'feeder':
+      return 'F';
+    case 'splitter':
+      return 'Y';
+    case 'spring':
+      return 'S' + DIR_TO_ARROW[s.dir];
     case 'plot':
       return 'P' + DIR_TO_ARROW[s.out];
     case 'kettle':
@@ -118,6 +129,8 @@ export function renderFloor(layout: Layout, state: SimState): string {
       if (pend) content = itemGlyph(pend.item);
       const roast = state.roasting[i];
       if (roast) content = 'r' + (state.T - roast.since);
+      const inside = state.springs[i]?.filter((x) => x !== null).length;
+      if (inside) content = 's' + inside;
       cells.push(structureToken(s).padEnd(2) + content.padEnd(3));
     }
     lines.push(String(row).padStart(2) + ' |' + cells.join('') + '|');

@@ -10,13 +10,12 @@ const EMPTY = '. . . . . . . . . . . .';
 describe('Steady state', () => {
   it('finds a one-loop cycle for a single line, and counts one serve per loop', () => {
     const layout = parseLayout([
-      '. . . . . W . . . . . .',
-      '. . . . . v . . . . . .',
-      '. . . . . P> > Kv . . . .',
-      '. . . . . . . v . . . .',
+      'F . . W . . . . . . . .',
+      'F . . Pv . . . . . . . .',
+      'F < < K< . . . . . . . .',
     ]);
     const seat: Seat = { col: 9, drink: 'coffee', roast: 'any', tick: 'any', grace: 0 };
-    const cycle = findCycle(layout, { seats: [seat], canPayMilk: true });
+    const cycle = findCycle(layout, { seats: [seat], milkPails: 3 });
     expect(cycle, renderFloor(layout, emptyState(layout))).not.toBeNull();
     expect(cycle!.loops).toBe(1);
     expect(cycle!.length).toBe(12);
@@ -26,15 +25,14 @@ describe('Steady state', () => {
   });
 
   it('counts serves per loop by hand: two cups a loop, one regular who takes one', () => {
-    // One well feeds two medium lines that join the counter at columns 3 and 5.
+    // One well feeds two medium lines that join the feeder in rows 0 and 2.
     const layout = parseLayout([
-      EMPTY,
-      '. . . Pv W Pv . . . . . .',
-      '. . . Kv . Kv . . . . . .',
-      '. . . v . v . . . . . .',
+      'F < < < K< . . . . . . .',
+      'F . Pv W P^ . . . . . . .',
+      'F < K< . . . . . . . . .',
     ]);
     const seats: Seat[] = [{ col: 10, drink: 'coffee', roast: 'medium', tick: 'any', grace: 0 }];
-    const cycle = findCycle(layout, { seats, canPayMilk: true })!;
+    const cycle = findCycle(layout, { seats, milkPails: 3 })!;
     expect(cycle.loops).toBe(1);
     expect(cycle.servesPerLoop).toEqual([1]);
     const ends = cycle.ticks.flatMap((t) => t.events).filter((e) => e.type === 'end');
@@ -49,7 +47,7 @@ describe('Steady state', () => {
     ]);
     const from = emptyState(layout);
     from.belts[tileIndex(2, 1)] = { kind: 'coffee', roast: 'light' };
-    const cycle = findCycle(layout, { seats: [], canPayMilk: true }, { from })!;
+    const cycle = findCycle(layout, { seats: [], milkPails: 3 }, { from })!;
     expect(cycle.loops).toBe(2);
     expect(cycle.length).toBe(24);
     expect(cycle.start).toBe(0);
@@ -57,7 +55,7 @@ describe('Steady state', () => {
 
   it('an empty floor is its own one-loop cycle', () => {
     const layout = parseLayout([EMPTY]);
-    const cycle = findCycle(layout, { seats: [], canPayMilk: true })!;
+    const cycle = findCycle(layout, { seats: [], milkPails: 3 })!;
     expect(cycle.loops).toBe(1);
     expect(cycle.start).toBe(0);
   });

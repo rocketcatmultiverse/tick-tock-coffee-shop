@@ -2,9 +2,10 @@
 // layout does there in steady state. Read from the events of one cycle found
 // by the simulator's steady-state detection.
 
-import { counterIndex, findCycle } from '../sim';
+import { counterIndex, findCycle, slotOf } from '../sim';
 import type { Item, Layout, RegularDef, Seat } from '../sim/types';
 import { LOOP } from '../sim/tuning';
+import { isMilkDrinker } from './regulars';
 
 export type StoolResult = 'justInTime' | 'grace' | 'miss';
 
@@ -20,11 +21,15 @@ export interface StripCell {
     tick: number | null;
     /** What is in front of them on that tick. */
     item: Item | null;
+    /** The slot they want; for an any-tick regular, the slot they last took a cup from, if any. */
+    slot: number | null;
   } | null;
 }
 
 export function counterStrip(layout: Layout, seats: Seat[], defs: readonly RegularDef[]): StripCell[] | null {
-  const cycle = findCycle(layout, { seats, canPayMilk: true });
+  // Steady state with the whole milk order paid for.
+  const milkPails = defs.slice(0, seats.length).filter(isMilkDrinker).length;
+  const cycle = findCycle(layout, { seats, milkPails });
   if (!cycle) return null;
   const cells: StripCell[] = [];
   for (let col = 0; col < 12; col++) {
@@ -59,7 +64,8 @@ export function counterStrip(layout: Layout, seats: Seat[], defs: readonly Regul
         item = serves[0].e.item;
       }
     }
-    cells[seat.col].stool = { seat: i, def: defs[i], result, tick, item };
+    const slot = seat.tick === 'any' ? (serves[0] ? slotOf(serves[0].T, seat.col) : null) : slotOf(seat.tick, seat.col);
+    cells[seat.col].stool = { seat: i, def: defs[i], result, tick, item, slot };
   });
   return cells;
 }

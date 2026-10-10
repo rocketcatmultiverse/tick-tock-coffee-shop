@@ -4,7 +4,7 @@
 import type { Layout, SimEvent, SimState, StepOpts } from './types';
 import { emptyState } from './state';
 import { step } from './step';
-import { LOOP } from './tuning';
+import { ANY_TICK_WAIT, LOOP } from './tuning';
 
 export interface CycleTick {
   T: number;
@@ -39,6 +39,10 @@ export function stateKey(s: SimState): string {
     rel(s.roasting, (r) => r.since - s.T),
     s.servedThisVisit,
     s.blocked,
+    // Only whether the any-tick wait is over matters, so ages are capped there.
+    s.lastServedAt.map((at) => (at === null ? ANY_TICK_WAIT : Math.min(ANY_TICK_WAIT, s.T - at))),
+    rel(s.springs, (items) => items),
+    // Splitter counts restart on tick 0, the only tick states are compared on, so they are left out.
   ]);
 }
 

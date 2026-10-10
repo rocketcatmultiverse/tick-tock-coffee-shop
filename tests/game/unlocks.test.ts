@@ -73,7 +73,7 @@ describe('Unlocks', () => {
     const plan = planBuild(
       layout,
       [
-        { index: tileIndex(0, 0), to: { kind: 'door' } },
+        { index: tileIndex(0, 11), to: { kind: 'door' } },
         { index: tileIndex(1, 1), to: { kind: 'mixer', out: 'S' } },
         { index: tileIndex(2, 2), to: { kind: 'well' } },
         { index: tileIndex(3, 3), to: { kind: 'well' } },

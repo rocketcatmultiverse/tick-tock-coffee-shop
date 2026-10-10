@@ -4,6 +4,9 @@ import type { Drink } from '../sim/types';
 import type { PieceKind } from './pieces';
 
 export const START_COINS = 80;
+
+/** An any-tick regular counts as waiting once this many ticks pass without a cup (proposed). */
+export const ANY_TICK_WAITING = 24;
 export const START_ROWS = 6;
 export const DEBUG_COINS = 9999;
 
@@ -20,22 +23,23 @@ export const PIECE_PRICE: Record<PieceKind, number> = {
   well: 25,
   mixer: 20,
   door: 20,
+  spring: 8, // proposed, docs/ADDENDUM-01.md
+  splitter: 15, // proposed, docs/ADDENDUM-01.md
 };
 
 export const FLOOR_ROW_PRICE = 50;
 export const MILK_PAIL_PRICE = 2;
 
-export const DRINK_PRICE: Record<Drink, number> = {
+/** Warm milk has no price: only the cat drinks it, and the cat pays nothing. */
+export const DRINK_PRICE: Record<Exclude<Drink, 'warmMilk'>, number> = {
   coffee: 5,
-  warmMilk: 6, // sold from the shelf only
   espresso: 8,
   auLait: 10,
   latte: 12,
 };
 
-export const JUST_IN_TIME_BONUS: Record<Drink, number> = {
+export const JUST_IN_TIME_BONUS: Record<Exclude<Drink, 'warmMilk'>, number> = {
   coffee: 3,
-  warmMilk: 0,
   espresso: 4,
   auLait: 5,
   latte: 6,
@@ -45,20 +49,9 @@ export const JUST_IN_TIME_BONUS: Record<Drink, number> = {
 export const GEARS_PER_CUP = 1;
 export const GEARS_JUST_IN_TIME = 2;
 
-export const SHELF_SIZE = 3;
-/** A shelf cup spills once it has sat this many ticks (proposed). */
-export const SHELF_STALE_TICKS = 6;
-/** Chance per tick that a walk-in buys the oldest shelf cup (proposed). */
-export const WALK_IN_CHANCE = 1 / 6;
-/** Walk-ins pay this share of the price, rounded down. */
-export const WALK_IN_PRICE_SHARE = 0.5;
-
-/** Seed for the walk-in generator. */
-export const WALK_IN_SEED = 12;
-
-/** The cat's bowl: against the right-hand wall, in the back row you start with (proposed). */
-export const BOWL_ROW = START_ROWS - 1;
-export const BOWL_COL = 11;
+/** The cat's bowl: pre-placed at row 3, column 9, next to the milk (docs/ADDENDUM-01.md). */
+export const BOWL_ROW = 3;
+export const BOWL_COL = 9;
 
 /** Entries kept in the paste buffer history, newest first (proposed). */
 export const BUFFER_HISTORY = 10;

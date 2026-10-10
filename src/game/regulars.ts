@@ -1,5 +1,5 @@
 import type { Drink, RegularDef, Seat } from '../sim/types';
-import { tileIndex } from '../sim/grid';
+import { slotOf, tileIndex } from '../sim/grid';
 import { BOWL_COL, BOWL_ROW } from './tuning';
 
 export type RegularStatus = 'new' | 'seated' | 'waiting';
@@ -24,6 +24,11 @@ export function seatFor(def: RegularDef): Seat {
   };
 }
 
+/** Milk drinkers grow the side door's standing order by one pail each. */
+export function isMilkDrinker(def: RegularDef): boolean {
+  return def.order.drink === 'warmMilk' || def.order.drink === 'auLait' || def.order.drink === 'latte';
+}
+
 const DRINK_NAME: Record<Drink, string> = {
   coffee: 'coffee',
   espresso: 'espresso',
@@ -36,6 +41,7 @@ const DRINK_NAME: Record<Drink, string> = {
 export function describeOrder(def: RegularDef): string {
   const o = def.order;
   const what = `${o.roast === 'any' ? '' : o.roast[0].toUpperCase() + o.roast.slice(1) + ' '}${DRINK_NAME[o.drink]}`;
-  const when = o.tick === 'any' ? 'any tick' : `tick ${o.tick}, grace ${o.grace}`;
+  const slot = def.bowl || o.tick === 'any' ? '' : ` (slot ${slotOf(o.tick, def.col)})`;
+  const when = o.tick === 'any' ? 'any tick' : `tick ${o.tick}${slot}, grace ${o.grace}`;
   return `${what}${def.bowl ? ' in the bowl' : ''}, ${when}${o.fussy ? ', fussy' : ''}`;
 }

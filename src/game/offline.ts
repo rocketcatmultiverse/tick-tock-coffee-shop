@@ -26,8 +26,9 @@ export function applyOffline(shop: Shop, lastSeen: number, now: number): Morning
   const loops = loopsAway(lastSeen, now);
   if (loops < 1) return null;
   const seats = shop.seats();
-  // The till does not move while away, so doors deliver if it could pay for their pails when you left.
-  const cycle = findCycle(shop.layout, { seats, canPayMilk: Math.floor(shop.till / MILK_PAIL_PRICE) });
+  // The till does not move while away, so the door delivers the pails it could pay for when you left.
+  const milkPails = Math.min(shop.milkOrder(), Math.floor(shop.till / MILK_PAIL_PRICE));
+  const cycle = findCycle(shop.layout, { seats, milkPails });
   const report: MorningReport = { loops, regulars: [], gears: shop.gears, gearsEarned: 0 };
   shop.regulars.forEach((reg, i) => {
     const def = shop.defs[i];

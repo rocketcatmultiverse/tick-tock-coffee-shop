@@ -111,6 +111,7 @@ export class Editor {
     const layout = this.shop.layout;
     if (row < 0 || row >= layout.rows) return 'Off the floor';
     const index = tileIndex(row, col);
+    if (layout.tiles[index]?.kind === 'feeder') return 'The feeder is fixed';
     if (layout.tiles[index]) return 'Occupied';
     let s: Structure;
     switch (piece) {
@@ -122,6 +123,12 @@ export class Editor {
         break;
       case 'door':
         s = { kind: 'door' };
+        break;
+      case 'splitter':
+        s = { kind: 'splitter' };
+        break;
+      case 'spring':
+        s = { kind: 'spring', dir };
         break;
       case 'chute': {
         const far = stepFrom(layout, index, dir, 2);

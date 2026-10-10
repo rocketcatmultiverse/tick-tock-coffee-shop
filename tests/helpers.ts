@@ -15,9 +15,9 @@ export interface Run {
   opts: StepOpts;
 }
 
-export function start(lines: readonly string[] | Layout, seats: Seat[] = [], canPayMilk: StepOpts['canPayMilk'] = true): Run {
+export function start(lines: readonly string[] | Layout, seats: Seat[] = [], milkPails = 1): Run {
   const layout = Array.isArray(lines) ? parseLayout(lines as string[]) : (lines as Layout);
-  return { layout, state: emptyState(layout, seats.length), log: [], opts: { seats, canPayMilk } };
+  return { layout, state: emptyState(layout, seats.length), log: [], opts: { seats, milkPails } };
 }
 
 /** Run one tick and return its events. */

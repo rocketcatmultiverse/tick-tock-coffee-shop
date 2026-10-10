@@ -4,16 +4,16 @@ import { step } from '../../src/sim/step';
 import { parseLayout } from '../../src/sim/text';
 import type { Seat, SimEvent, SimState } from '../../src/sim/types';
 
-// Every machine in one layout: wells, plots, kettles, a roaster, a mixer, a
-// chute, a back door and merges onto the counter.
+// Every piece in one layout: the feeder, wells, plots, kettles, a roaster, a
+// mixer, a chute, a spring, a splitter, the side door and merges.
 const BUSY = parseLayout([
-  '. . . . . . . . . . . B',
-  '> > > v . . . . . . . .',
-  'D > R> v . . . W > P> v .',
-  '. . . v . . . v . . v .',
-  'W > P> K> M> > > Lv > Kv < .',
-  '. . . . ^ . . P< Cv . v .',
-  '. . . . ^ < < K< v . v .',
+  'F . . . . . . . . . . B',
+  'F > > v . . Y < < < < D',
+  'F W R> v < S< v . W > P> v',
+  'F . . v . . . v . . v .',
+  'F W P> K> M> > > Lv > Kv < .',
+  'F . . . ^ . . P< Cv . v .',
+  'F < < < ^ < < K< v . v .',
 ]);
 
 const SEATS: Seat[] = [
@@ -25,7 +25,7 @@ function runAll(ticks: number): { events: SimEvent[][]; final: SimState } {
   let state = emptyState(BUSY, SEATS.length);
   const events: SimEvent[][] = [];
   for (let T = 0; T < ticks; T++) {
-    const r = step(BUSY, state, { seats: SEATS, canPayMilk: true });
+    const r = step(BUSY, state, { seats: SEATS, milkPails: 2 });
     events.push(r.events);
     state = r.next;
   }
@@ -46,7 +46,7 @@ describe('Determinism', () => {
     const layoutCopy = structuredClone(BUSY);
     for (let T = 0; T < 60; T++) {
       const before = structuredClone(state);
-      const { next } = step(BUSY, state, { seats: SEATS, canPayMilk: true });
+      const { next } = step(BUSY, state, { seats: SEATS, milkPails: 2 });
       expect(state).toEqual(before);
       expect(next).not.toBe(state);
       state = next;

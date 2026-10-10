@@ -1,17 +1,15 @@
-// The live shop: the layout, the simulator state, the till, the regulars, the
-// shelf and walk-ins, advanced one tick at a time. All rules about what happens
+// The live shop: the layout, the simulator state, the till, the regulars and
+// the milk order, advanced one tick at a time. All rules about what happens
 // on the floor are in src/sim/; this layer only reads the simulator's events.
 
-import { adaptState, emptyLayout, emptyState, isDrink, itemName, step, tileIndex, visitLength, visitOffset } from '../sim';
+import { adaptState, emptyState, itemName, step, visitLength, visitOffset } from '../sim';
 import type { Drink, Item, Layout, RegularDef, Seat, SimEvent, SimState } from '../sim/types';
-import { COLS, LOOP } from '../sim/tuning';
-import { type BuildPlan, type BuildRights, type TileChange, planBuild, rightsAfter } from './build';
+import { COLS, LOOP, MILK_TICK } from '../sim/tuning';
+import { type BuildPlan, type BuildRights, type TileChange, planBuild, rightsAfter, startLayout } from './build';
 import { PIECE_LABEL } from './pieces';
-import { type RegularState, seatFor } from './regulars';
-import { type Rng, makeRng, nextRandom } from './rng';
+import { type RegularState, isMilkDrinker, seatFor } from './regulars';
 import {
-  BOWL_COL,
-  BOWL_ROW,
+  ANY_TICK_WAITING,
   DEBUG_COINS,
   DRINK_PRICE,
   FLOOR_ROW_PRICE,
@@ -19,25 +17,13 @@ import {
   GEARS_PER_CUP,
   JUST_IN_TIME_BONUS,
   MILK_PAIL_PRICE,
-  SHELF_SIZE,
-  SHELF_STALE_TICKS,
   START_COINS,
   START_ROWS,
-  WALK_IN_CHANCE,
-  WALK_IN_PRICE_SHARE,
-  WALK_IN_SEED,
 } from './tuning';
 
 export interface ShopOptions {
   defs: readonly RegularDef[];
   debug?: boolean;
-  seed?: number;
-}
-
-export interface ShelfCup {
-  item: Item;
-  /** Ticks on the shelf, counting the tick it arrived. */
-  age: number;
 }
 
 export interface TickReport {
@@ -57,8 +43,6 @@ export class Shop {
   catName = '';
   /** Regulars who have walked in, in order. The last one may still be new. */
   regulars: RegularState[] = [];
-  shelf: ShelfCup[] = [];
-  rng: Rng;
   /** Spills counted on the current loop and on the last full loop. */
   spillsThisLoop = 0;
   spillsLastLoop = 0;
@@ -66,14 +50,14 @@ export class Shop {
   lastEvents: SimEvent[] = [];
   /** Per walked-in regular: took a cup during their current visit. */
   private visitServed: boolean[] = [];
+  /** The till could not cover a pail this loop, so the rest of the order does not come. */
+  private milkStopped = false;
 
   constructor(opts: ShopOptions) {
     this.defs = opts.defs;
     this.debug = !!opts.debug;
-    this.layout = emptyLayout(START_ROWS);
-    this.layout.tiles[tileIndex(BOWL_ROW, BOWL_COL)] = { kind: 'bowl' };
+    this.layout = startLayout(START_ROWS);
     this.till = this.debug ? DEBUG_COINS : START_COINS;
-    this.rng = makeRng(opts.seed ?? WALK_IN_SEED);
     this.sim = emptyState(this.layout, 0);
     if (this.defs.length > 0) this.walkIn();
   }
@@ -86,7 +70,6 @@ export class Shop {
     this.catName = saved.catName;
     this.regulars = saved.regulars.map((r) => ({ ...r }));
     this.visitServed = this.regulars.map(() => false);
-    this.shelf = [];
     this.sim = emptyState(this.layout, this.regulars.length);
   }
 
@@ -121,8 +104,7 @@ export class Shop {
       if (visitOffset(seat, T) === 0) this.visitServed[i] = false;
     });
 
-    const canPayMilk = Math.floor(this.till / MILK_PAIL_PRICE);
-    const { next, events } = step(this.layout, this.sim, { seats, canPayMilk });
+    const { next, events } = step(this.layout, this.sim, { seats, milkPails: this.milkPails(T) });
     this.sim = next;
 
     let spills = 0;
@@ -147,32 +129,24 @@ export class Shop {
           break;
         }
         case 'end':
-          if (this.shelf.length < SHELF_SIZE) this.shelf.push({ item: e.item, age: 0 });
-          else spills++;
+          spills++; // no shelf: a cup nobody takes spills at the end of the counter
           break;
         default:
           break;
       }
     }
 
-    // Shelf cups age; stale ones spill. Then a walk-in may buy the oldest.
-    for (const cup of this.shelf) cup.age++;
-    const fresh = this.shelf.filter((c) => c.age <= SHELF_STALE_TICKS);
-    spills += this.shelf.length - fresh.length;
-    this.shelf = fresh;
-    const roll = nextRandom(this.rng);
-    if (roll < WALK_IN_CHANCE && this.shelf.length > 0) {
-      const cup = this.shelf.shift()!;
-      const paid = this.walkInPrice(cup.item);
-      this.till += paid;
-      notes.push(`A walk-in buys a ${itemName(cup.item)} off the shelf for ${paid}.`);
-    }
-
-    // Seated regulars whose visit ends without a cup go to waiting.
+    // Seated regulars whose visit ends without a cup go to waiting. Any-tick
+    // regulars are always there: they wait once ANY_TICK_WAITING ticks pass without a cup.
     seats.forEach((seat, i) => {
-      if (visitOffset(seat, T) !== visitLength(seat)) return;
       const reg = this.regulars[i];
-      if (reg.status === 'seated' && !this.visitServed[i]) {
+      if (reg.status !== 'seated') return;
+      const last = this.sim.lastServedAt[i];
+      const waiting =
+        seat.tick === 'any'
+          ? last !== null && T - last >= ANY_TICK_WAITING
+          : visitOffset(seat, T) === visitLength(seat) && !this.visitServed[i];
+      if (waiting) {
         reg.status = 'waiting';
         notes.push(`${this.defs[i].name} is waiting.`);
       }
@@ -185,6 +159,26 @@ export class Shop {
     return { T, events, notes };
   }
 
+  /** Pails in the standing milk order: one per milk drinker who has walked in. */
+  milkOrder(): number {
+    return this.regulars.filter((_, i) => isMilkDrinker(this.defs[i])).length;
+  }
+
+  /**
+   * Pails the side door may deliver this loop, as seen on tick T. Each pail is
+   * paid on delivery; if the till cannot cover one, that pail and the rest of
+   * the loop's order do not come (docs/ADDENDUM-01.md).
+   */
+  private milkPails(T: number): number {
+    const t = T % LOOP;
+    if (t === 0) this.milkStopped = false;
+    const order = this.milkOrder();
+    const due = t - MILK_TICK; // which pail of the order is due now
+    if (due < 0 || due >= order) return order;
+    if (!this.milkStopped && this.till < MILK_PAIL_PRICE) this.milkStopped = true;
+    return this.milkStopped ? due : due + 1;
+  }
+
   private pay(def: RegularDef, item: Item, justInTime: boolean): string {
     const what = itemName(item);
     const jit = justInTime ? ' Just in Time!' : '';
@@ -194,15 +188,10 @@ export class Shop {
       return `${def.name} takes a ${what} and leaves ${n} gear${n === 1 ? '' : 's'}.${jit}`;
     }
     if (def.paysIn === 'nothing') return `${def.name} takes a ${what}.`;
-    const drink = item.kind as Drink;
+    const drink = item.kind as Exclude<Drink, 'warmMilk'>;
     const coins = DRINK_PRICE[drink] + (justInTime ? JUST_IN_TIME_BONUS[drink] : 0);
     this.till += coins;
     return `${def.name} takes a ${what} for ${coins}.${jit}`;
-  }
-
-  private walkInPrice(item: Item): number {
-    if (!isDrink(item)) return 0;
-    return Math.floor(DRINK_PRICE[item.kind] * WALK_IN_PRICE_SHARE);
   }
 
   /** The next regular walks in with their stool, and anything they unlock. */
@@ -234,7 +223,8 @@ export class Shop {
   buyRow(): string | null {
     if (this.till < FLOOR_ROW_PRICE) return `A floor row costs ${FLOOR_ROW_PRICE}`;
     this.till -= FLOOR_ROW_PRICE;
-    const tiles = this.layout.tiles.concat(new Array(COLS).fill(null));
+    // The new row comes with its own feeder tile, free.
+    const tiles = this.layout.tiles.concat([{ kind: 'feeder' }, ...new Array(COLS - 1).fill(null)]);
     this.setLayout({ cols: 12, rows: this.layout.rows + 1, tiles });
     return null;
   }

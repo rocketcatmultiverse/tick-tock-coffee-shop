@@ -35,9 +35,9 @@ describe('Editor', () => {
     ed.dragTo(0, 4);
     ed.release();
     expect(layoutToText(shop.layout).slice(3)).toEqual([
-      '.  .  >  >  v  .  .  .  .  .  .  .',
-      '.  .  .  .  v  .  .  .  .  .  .  .',
-      '.  .  .  .  v  .  .  .  .  .  .  .',
+      'F  .  >  >  v  .  .  .  .  .  .  .',
+      'F  .  .  .  v  .  .  .  .  .  .  .',
+      'F  .  .  .  v  .  .  .  .  .  .  .',
     ]);
     expect(shop.till).toBe(START_COINS - 5);
     ed.undo();
@@ -74,11 +74,11 @@ describe('Editor', () => {
   it('refuses a paste that overlaps, and says why', () => {
     const { shop, ed } = setup();
     ed.pick('belt');
-    ed.press(0, 0);
+    ed.press(0, 1);
     ed.release();
-    ed.copy('hover', 0, 0);
-    expect(ed.ghost(0, 0)?.reason).toBe('Overlaps something');
-    ed.press(0, 0);
+    ed.copy('hover', 0, 1);
+    expect(ed.ghost(0, 1)?.reason).toBe('Overlaps something');
+    ed.press(0, 1);
     expect(shop.till).toBe(START_COINS - 1);
   });
 
@@ -99,11 +99,11 @@ describe('Editor', () => {
   it('box copy, rotate and paste turns the whole group', () => {
     const { shop, ed } = setup();
     ed.pick('belt');
-    ed.press(0, 0);
-    ed.dragTo(0, 1);
+    ed.press(0, 1);
+    ed.dragTo(0, 2);
     ed.release();
-    ed.beginSelect(0, 0);
-    ed.selectTo(0, 1);
+    ed.beginSelect(0, 1);
+    ed.selectTo(0, 2);
     ed.endSelect();
     ed.copy('box');
     ed.rotateHand();
@@ -114,7 +114,7 @@ describe('Editor', () => {
 
   it('the cat\'s bowl cannot be deleted', () => {
     const { shop, ed } = setup();
-    ed.deleteKey(5, 11);
-    expect(shop.layout.tiles[tileIndex(5, 11)]).toEqual({ kind: 'bowl' });
+    ed.deleteKey(3, 9);
+    expect(shop.layout.tiles[tileIndex(3, 9)]).toEqual({ kind: 'bowl' });
   });
 });

@@ -11,13 +11,17 @@ export function emptyState(layout: Layout, seatCount = 0): SimState {
     roasting: {},
     servedThisVisit: new Array(seatCount).fill(false),
     blocked: new Array(seatCount).fill(false),
+    lastServedAt: new Array(seatCount).fill(null),
+    springs: {},
+    splitters: {},
   };
 }
 
 /**
  * How far into their visit a seat is on tick `T`, or null when they are not
  * at the counter. A visit runs from their tick to their tick plus grace.
- * Regulars with tick 'any' stay all loop, from clock tick 0 to 11.
+ * Regulars with tick 'any' are always there; what they take is limited by
+ * ANY_TICK_WAIT instead (docs/ADDENDUM-01.md, "Any-tick regulars").
  */
 export function visitOffset(seat: Seat, T: number): number | null {
   const t = clockTick(T);
@@ -35,8 +39,11 @@ export function isPresent(seat: Seat, T: number): boolean {
   return visitOffset(seat, T) !== null;
 }
 
+/** Tiles that hold one item in `SimState.belts`. A spring keeps its items in `SimState.springs`. */
 function beltLike(s: Structure | null | undefined): boolean {
-  return !!s && (s.kind === 'belt' || s.kind === 'launch' || s.kind === 'catch');
+  return (
+    !!s && (s.kind === 'belt' || s.kind === 'launch' || s.kind === 'catch' || s.kind === 'feeder' || s.kind === 'splitter')
+  );
 }
 
 /**
@@ -50,6 +57,8 @@ export function adaptState(before: Layout, after: Layout, state: SimState, seatC
   const plots: SimState['plots'] = {};
   const pending: SimState['pending'] = {};
   const roasting: SimState['roasting'] = {};
+  const springs: SimState['springs'] = {};
+  const splitters: SimState['splitters'] = {};
   const shared = Math.min(before.rows, after.rows) * COLS;
   for (let i = 0; i < shared; i++) {
     const a = before.tiles[i];
@@ -59,17 +68,22 @@ export function adaptState(before: Layout, after: Layout, state: SimState, seatC
       if (state.plots[i]) plots[i] = state.plots[i];
       if (state.pending[i]) pending[i] = state.pending[i];
       if (state.roasting[i]) roasting[i] = state.roasting[i];
+      if (state.springs[i]) springs[i] = state.springs[i];
+      if (state.splitters[i] !== undefined) splitters[i] = state.splitters[i];
     }
   }
   for (let c = 0; c < COLS; c++) belts[counterIndex(after, c)] = state.belts[counterIndex(before, c)];
-  const pad = (xs: boolean[]) => Array.from({ length: seatCount }, (_, i) => xs[i] ?? false);
+  const pad = <V>(xs: V[], fill: V) => Array.from({ length: seatCount }, (_, i) => xs[i] ?? fill);
   return {
     T: state.T,
     belts,
     plots,
     pending,
     roasting,
-    servedThisVisit: pad(state.servedThisVisit),
-    blocked: pad(state.blocked),
+    servedThisVisit: pad(state.servedThisVisit, false),
+    blocked: pad(state.blocked, false),
+    lastServedAt: pad<number | null>(state.lastServedAt, null),
+    springs,
+    splitters,
   };
 }

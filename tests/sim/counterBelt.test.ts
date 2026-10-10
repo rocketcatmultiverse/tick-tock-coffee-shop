@@ -1,33 +1,37 @@
+// Counter belt (docs/ADDENDUM-01.md, replacing the Spec 6 test): a cup that
+// steps onto column 0 on tick e is in front of column s on tick e + s.
+// Untaken, it runs off the end on tick e + 12 and spills.
+
 import { describe, expect, it } from 'vitest';
 import { counterIndex, tileIndex } from '../../src/sim/grid';
-import { emptyLayout } from '../../src/sim/grid';
 import { allOf, floor, runTo, start } from '../helpers';
 
+const FEEDER = ['F . . . . . . . . . . .'];
+
 describe('Counter belt', () => {
-  for (let c = 0; c < 12; c++) {
-    it(`a cup joining at column ${c} is in front of every later column s exactly s - c ticks later`, () => {
-      const layout = emptyLayout(2);
-      layout.tiles[tileIndex(0, c)] = { kind: 'kettle', out: 'S' };
-      const run = start(layout);
+  for (const e of [1, 5, 12]) {
+    it(`a cup stepping onto column 0 on tick ${e} is in front of column s on tick ${e} + s, and runs off on tick ${e + 12}`, () => {
+      const run = start(FEEDER);
       const cup = { kind: 'coffee', roast: 'medium' } as const;
-      run.state.pending[tileIndex(0, c)] = { item: cup, readyAt: 0 };
-      for (let s = c; s < 12; s++) {
-        runTo(run, s - c + 1); // after tick s - c
+      runTo(run, e);
+      run.state.belts[tileIndex(0, 0)] = cup; // on the feeder: tick e moves it onto column 0
+      for (let s = 0; s < 12; s++) {
+        runTo(run, e + s + 1); // after tick e + s
         const where = run.state.belts.flatMap((it, i) => (it ? [i] : []));
-        expect(where, floor(run)).toEqual([counterIndex(layout, s)]);
+        expect(where, floor(run)).toEqual([counterIndex(run.layout, s)]);
       }
-      runTo(run, 13);
+      runTo(run, e + 14);
       const ends = allOf(run, 'end');
-      expect(ends.map((e) => e.T), floor(run)).toEqual([12 - c]);
+      expect(ends.map((x) => x.T), floor(run)).toEqual([e + 12]);
       expect(ends[0].item, floor(run)).toEqual(cup);
     });
   }
 
   it('spills anything that is not a drink at the end of the belt', () => {
-    const run = start(emptyLayout(1));
+    const run = start(FEEDER);
     run.state.belts[counterIndex(run.layout, 11)] = { kind: 'beans' };
     runTo(run, 1);
     expect(allOf(run, 'end'), floor(run)).toEqual([]);
-    expect(allOf(run, 'spill').map((e) => e.item), floor(run)).toEqual([{ kind: 'beans' }]);
+    expect(allOf(run, 'spill').map((x) => x.item), floor(run)).toEqual([{ kind: 'beans' }]);
   });
 });

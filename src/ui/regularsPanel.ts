@@ -4,6 +4,8 @@ import type { RegularDef } from '../sim/types';
 import { describeOrder, type RegularState } from '../game/regulars';
 import { el } from './panel';
 
+const seatName = (def: RegularDef) => (def.bowl ? 'at the bowl' : `stool ${def.col}`);
+
 export class RegularsPanel {
   readonly root = el('div', { className: 'regulars' });
   private card = el('div', { className: 'card' });
@@ -18,7 +20,7 @@ export class RegularsPanel {
     this.card.replaceChildren();
     if (newcomer) {
       this.card.append(
-        el('div', { className: 'card-name' }, `${newcomer.name} (stool ${newcomer.col})`),
+        el('div', { className: 'card-name' }, `${newcomer.name} (${seatName(newcomer)})`),
         el('div', {}, describeOrder(newcomer)),
         el('div', { className: 'intro' }, `"${newcomer.intro}"`),
       );
@@ -30,7 +32,7 @@ export class RegularsPanel {
         el(
           'li',
           { className: r.status },
-          `${defs[i].name}, stool ${defs[i].col}: ${describeOrder(defs[i])}. ${r.status}${r.loyalty ? `, served ${r.loyalty}` : ''}`,
+          `${defs[i].name}, ${seatName(defs[i])}: ${describeOrder(defs[i])}. ${r.status}${r.loyalty ? `, served ${r.loyalty}` : ''}`,
         ),
       ),
     );

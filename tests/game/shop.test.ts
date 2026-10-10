@@ -5,12 +5,12 @@ import { REFERENCE_LAYOUTS } from '../../src/levels/layouts';
 import { parseLayout, renderFloor } from '../../src/sim/text';
 import { tileIndex } from '../../src/sim/grid';
 import type { TileChange } from '../../src/game/build';
-import { START_COINS, SHELF_SIZE } from '../../src/game/tuning';
+import { START_COINS } from '../../src/game/tuning';
 
 function layoutChanges(id: string): TileChange[] {
   const ref = REFERENCE_LAYOUTS.find((r) => r.id === id)!;
   const layout = parseLayout(ref.rows);
-  return layout.tiles.flatMap((to, index) => (to && to.kind !== 'bowl' ? [{ index, to }] : []));
+  return layout.tiles.flatMap((to, index) => (to && to.kind !== 'bowl' && to.kind !== 'feeder' ? [{ index, to }] : []));
 }
 
 function run(shop: Shop, ticks: number): string[] {
@@ -24,7 +24,7 @@ describe('Shop', () => {
     const shop = new Shop({ defs: REGULARS });
     expect(shop.till).toBe(START_COINS);
     expect(shop.regulars).toEqual([{ id: 'lamplighter', status: 'new', loyalty: 0 }]);
-    expect(shop.layout.tiles[tileIndex(5, 11)]).toEqual({ kind: 'bowl' });
+    expect(shop.layout.tiles[tileIndex(3, 9)]).toEqual({ kind: 'bowl' });
   });
 
   it('regulars 1 to 4 arrive strictly in order, each once the one before is served', () => {
@@ -55,21 +55,40 @@ describe('Shop', () => {
   });
 
   it('a seated regular whose line is broken goes to waiting, and the next correct cup seats them again', () => {
-    const shop = new Shop({ defs: REGULARS.slice(0, 1) });
-    for (const ch of layoutChanges('lamplighter')) expect(shop.build([ch]).ok).toBe(true);
+    const shop = new Shop({ defs: REGULARS.slice(0, 1), debug: true });
+    for (const ch of layoutChanges('all-four')) expect(shop.build([ch]).ok).toBe(true);
     run(shop, 24);
     expect(shop.regulars[0].status).toBe('seated');
-    // Take the plot away: the line stops.
-    shop.build([{ index: tileIndex(2, 4), to: null }]);
-    const notes = run(shop, 24);
+    // Take the well away: every line stops.
+    shop.build([{ index: tileIndex(1, 3), to: null }]);
+    const notes = run(shop, 48);
     expect(shop.regulars[0].status).toBe('waiting');
     expect(notes).toContain('The lamplighter is waiting.');
     const till = shop.till;
     run(shop, 12);
     expect(shop.till).toBe(till); // waiting regulars pay nothing
-    shop.build([{ index: tileIndex(2, 4), to: { kind: 'plot', out: 'W' } }]);
+    shop.build([{ index: tileIndex(1, 3), to: { kind: 'well' } }]);
     run(shop, 24);
     expect(shop.regulars[0].status).toBe('seated');
+  });
+
+  it('an any-tick regular counts as waiting once 24 ticks have passed since their last cup', () => {
+    const shop = new Shop({ defs: REGULARS.slice(0, 1), debug: true });
+    shop.build(layoutChanges('all-four'));
+    run(shop, 36);
+    expect(shop.regulars[0].status).toBe('seated');
+    const last = shop.sim.lastServedAt[0]!;
+    shop.build(layoutChanges('all-four').map((ch) => ({ index: ch.index, to: null })));
+    // Cups already on the belt may still arrive, so step until the regular stops being served.
+    const statusAt = new Map<number, string>();
+    for (let k = 0; k < 48; k++) {
+      shop.tick();
+      statusAt.set(shop.T - 1, shop.regulars[0].status);
+    }
+    const lastCup = shop.sim.lastServedAt[0]!;
+    expect(lastCup).toBeGreaterThanOrEqual(last);
+    expect(statusAt.get(lastCup + 23)).toBe('seated');
+    expect(statusAt.get(lastCup + 24)).toBe('waiting');
   });
 
   it('refunds a removed piece in full', () => {
@@ -90,45 +109,22 @@ describe('Shop', () => {
     expect(shop.till).toBe(10);
   });
 
-  it('shelves untaken drinks, holds 3, spills stale cups, and walk-ins buy the oldest at half price', () => {
-    // Nobody wants dark coffee before the sweep arrives, so it all goes to the shelf.
-    const shop = new Shop({ defs: REGULARS.slice(0, 1), debug: true, seed: 3 });
-    shop.build(layoutChanges('sweep'));
-    let maxShelf = 0;
-    let sales = 0;
-    let tillBefore = shop.till;
-    for (let k = 0; k < 12 * 50; k++) {
-      const { notes } = shop.tick();
-      maxShelf = Math.max(maxShelf, shop.shelf.length);
-      for (const n of notes) {
-        if (n.startsWith('A walk-in buys')) {
-          sales++;
-          expect(n).toContain('dark coffee');
-          expect(shop.till - tillBefore).toBe(2); // half of 5, rounded down
-        }
-      }
-      for (const cup of shop.shelf) expect(cup.age).toBeLessThanOrEqual(6);
-      tillBefore = shop.till;
-    }
-    expect(maxShelf).toBeLessThanOrEqual(SHELF_SIZE);
-    expect(sales).toBeGreaterThan(0);
-  });
-
-  it('a full shelf spills the next drink', () => {
-    const shop = new Shop({ defs: [], seed: 1 });
-    shop.shelf = [0, 1, 2].map(() => ({ item: { kind: 'coffee', roast: 'dark' } as const, age: 0 }));
-    shop.rng.state = 0; // whatever happens, check the count stays at most 3
+  it('has no shelf: a cup nobody takes spills at the end of the counter and counts as a spill', () => {
+    const shop = new Shop({ defs: [] });
     shop.sim.belts[shop.layout.rows * 12 + 11] = { kind: 'coffee', roast: 'light' };
-    const spillsBefore = shop.spillsThisLoop;
-    shop.tick();
-    expect(shop.shelf.length).toBeLessThanOrEqual(SHELF_SIZE);
-    expect(shop.shelf.some((c) => c.item.kind === 'coffee' && 'roast' in c.item && c.item.roast === 'light')).toBe(false);
-    expect(shop.spillsThisLoop).toBeGreaterThan(spillsBefore);
+    const till = shop.till;
+    const { events } = shop.tick();
+    expect(events.filter((e) => e.type === 'end')).toHaveLength(1);
+    expect(shop.spillsThisLoop).toBe(1);
+    expect(shop.till).toBe(till);
+    expect('shelf' in shop).toBe(false);
   });
 
   it('charges for milk pails, and none arrive when the till cannot pay', () => {
-    const shop = new Shop({ defs: [], debug: true });
-    shop.build([{ index: tileIndex(2, 0), to: { kind: 'door' } }]);
+    const cat = REGULARS.find((d) => d.bowl)!;
+    const shop = new Shop({ defs: [cat], debug: true });
+    expect(shop.milkOrder()).toBe(1);
+    shop.build([{ index: tileIndex(2, 11), to: { kind: 'door' } }]);
     const till = shop.till;
     const pails = (ticks: number) => {
       let n = 0;
@@ -140,5 +136,29 @@ describe('Shop', () => {
     shop.till = 1;
     expect(pails(12)).toBe(0);
     expect(shop.till).toBe(1);
+  });
+
+  it('the order is one pail per milk drinker, and a pail the till cannot cover stops the rest of that loop', () => {
+    const milk = REGULARS.filter((d) => d.order.drink !== 'coffee' && d.order.drink !== 'espresso');
+    expect(milk.map((d) => d.id)).toEqual(['cat', 'innkeeper', 'mayor']);
+    const shop = new Shop({ defs: milk, debug: true });
+    // Walk the other two in by hand; in play each follows a serve.
+    shop.regulars.push({ id: 'innkeeper', status: 'seated', loyalty: 0 }, { id: 'mayor', status: 'seated', loyalty: 0 });
+    expect(shop.milkOrder()).toBe(3);
+    shop.build([{ index: tileIndex(2, 11), to: { kind: 'door' } }]);
+    const milkTicks = (ticks: number) => {
+      const out: number[] = [];
+      for (let k = 0; k < ticks; k++) {
+        const { T, events } = shop.tick();
+        for (const e of events) if (e.type === 'milk') out.push(T % 12);
+      }
+      return out;
+    };
+    expect(milkTicks(12)).toEqual([7, 8, 9]);
+    shop.till = 3; // covers one pail
+    expect(milkTicks(12)).toEqual([7]);
+    expect(shop.till).toBe(1);
+    shop.till = 100;
+    expect(milkTicks(12)).toEqual([7, 8, 9]);
   });
 });

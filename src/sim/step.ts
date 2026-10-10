@@ -6,7 +6,7 @@ import type { Dir, Item, Layout, Seat, SimEvent, SimState, StepOpts, Structure }
 import { DIRS, DIR_RANK, beltSlots, clockTick, counterIndex, isCounter, opposite, stepFrom } from './grid';
 import { isDrink, matchesOrder, roastForTick, roastForTime } from './items';
 import { visitLength, visitOffset } from './state';
-import { BREW_TIME, COLS, DOOR_TICK, GROWTH, MIX_TIME, ROASTER_TICK, WELL_TICK } from './tuning';
+import { ANY_TICK_WAIT, BREW_TIME, COLS, GROWTH, MILK_TICK, MIX_TIME, ROASTER_TICK, SPRING_TICKS, WELL_TICK } from './tuning';
 
 interface Arrival {
   item: Item;
@@ -25,14 +25,16 @@ function byPriority(a: Arrival, b: Arrival): number {
   return 0;
 }
 
-function isBeltLike(s: Structure | null): s is Extract<Structure, { kind: 'belt' | 'launch' | 'catch' }> {
-  return !!s && (s.kind === 'belt' || s.kind === 'launch' || s.kind === 'catch');
+type BeltLike = Extract<Structure, { kind: 'belt' | 'launch' | 'catch' | 'feeder' }>;
+
+/** Tiles that hold one item and pass it along every tick. */
+function isBeltLike(s: Structure | null): s is BeltLike {
+  return !!s && (s.kind === 'belt' || s.kind === 'launch' || s.kind === 'catch' || s.kind === 'feeder');
 }
 
-/** Whether door number `ordinal` (in tile order) gets its pail this loop. */
-function doorPaid(canPayMilk: StepOpts['canPayMilk'], ordinal: number): boolean {
-  if (typeof canPayMilk === 'number') return ordinal < canPayMilk;
-  return canPayMilk;
+/** The way a belt-like tile moves its item. The feeder always flows toward the counter. */
+function flow(s: BeltLike): Dir {
+  return s.kind === 'feeder' ? 'S' : s.dir;
 }
 
 export function step(layout: Layout, state: SimState, opts: StepOpts): { next: SimState; events: SimEvent[] } {
@@ -47,6 +49,9 @@ export function step(layout: Layout, state: SimState, opts: StepOpts): { next: S
   const roasting = { ...state.roasting };
   const served = seats.map((_, i) => state.servedThisVisit[i] ?? false);
   const blocked = seats.map((_, i) => state.blocked[i] ?? false);
+  const lastServedAt = seats.map((_, i) => state.lastServedAt[i] ?? null);
+  // Splitters count the items they have passed since tick 0; the round restarts every loop.
+  const splitters: SimState['splitters'] = t === 0 ? {} : { ...state.splitters };
 
   // Seats arriving this tick start a fresh visit. A fussy regular looks at
   // their counter tile as it was at the end of the tick before.
@@ -57,12 +62,16 @@ export function step(layout: Layout, state: SimState, opts: StepOpts): { next: S
     if (seat.fussy && seat.bowl === undefined && state.belts[counterIndex(layout, seat.col)] !== null) blocked[i] = true;
   });
 
+  // The counter takes items on column 0 only, from the feeder in row 0 only.
+  const feedsCounter = (from: number, target: number) =>
+    target === counterIndex(layout, 0) && from === 0 && layout.tiles[0]?.kind === 'feeder';
+
   const arrivals = new Map<number, Arrival[]>();
   const spill = (at: number, item: Item) => events.push({ type: 'spill', at, item });
   const aim = (from: number, d: Dir, item: Item, belt: boolean, distance = 1) => {
     const target = stepFrom(layout, from, d, distance);
-    if (target === null) {
-      spill(from, item); // a wall
+    if (target === null || (isCounter(layout, target) && !feedsCounter(from, target))) {
+      spill(from, item); // a wall, or the counter from anywhere but the feeder
       return;
     }
     const list = arrivals.get(target) ?? [];
@@ -71,7 +80,6 @@ export function step(layout: Layout, state: SimState, opts: StepOpts): { next: S
   };
 
   // 1. Emit.
-  let doorOrdinal = 0;
   for (let i = 0; i < backRoom; i++) {
     const s = layout.tiles[i];
     if (!s) continue;
@@ -79,14 +87,13 @@ export function step(layout: Layout, state: SimState, opts: StepOpts): { next: S
       case 'well':
         if (t === WELL_TICK) for (const d of DIRS) aim(i, d, { kind: 'water' }, false);
         break;
-      case 'door': {
-        const ordinal = doorOrdinal++;
-        if (t === DOOR_TICK && doorPaid(opts.canPayMilk, ordinal)) {
+      case 'door':
+        // The milk order: one pail a tick, starting on MILK_TICK.
+        if (t >= MILK_TICK && t < MILK_TICK + opts.milkPails) {
           events.push({ type: 'milk', at: i });
-          aim(i, 'E', { kind: 'milk' }, false);
+          aim(i, 'W', { kind: 'milk' }, false);
         }
         break;
-      }
       case 'plot': {
         const p = state.plots[i];
         if (p && p.harvestAt <= T) {
@@ -136,8 +143,28 @@ export function step(layout: Layout, state: SimState, opts: StepOpts): { next: S
       continue;
     }
     const s = layout.tiles[i];
-    if (isBeltLike(s)) aim(i, s.dir, item, true, s.kind === 'launch' ? 2 : 1);
-    else spill(i, item); // only reachable after a live edit left an item stranded
+    if (isBeltLike(s)) aim(i, flow(s), item, true, s.kind === 'launch' ? 2 : 1);
+    else if (s?.kind === 'splitter') {
+      const outs = splitterOutputs(layout, i);
+      if (outs.length === 0) {
+        spill(i, item);
+        continue;
+      }
+      const passed = splitters[i] ?? 0;
+      aim(i, outs[passed % outs.length], item, true);
+      splitters[i] = passed + 1;
+    } else spill(i, item); // only reachable after a live edit left an item stranded
+  }
+
+  // Springs: the item that has been inside longest leaves as a belt item; the rest move up one place.
+  const springs: SimState['springs'] = {};
+  for (let i = 0; i < backRoom; i++) {
+    const s = layout.tiles[i];
+    if (s?.kind !== 'spring') continue;
+    const inside = state.springs[i] ?? new Array<Item | null>(SPRING_TICKS).fill(null);
+    const leaving = inside[SPRING_TICKS - 1];
+    if (leaving) aim(i, s.dir, leaving, true);
+    springs[i] = [null, ...inside.slice(0, SPRING_TICKS - 1)];
   }
 
   // 3. Land, and 4. machines take in.
@@ -146,8 +173,14 @@ export function step(layout: Layout, state: SimState, opts: StepOpts): { next: S
   for (const at of targets) {
     const list = arrivals.get(at)!.slice().sort(byPriority);
     const s = at < backRoom ? layout.tiles[at] : null;
-    if (isCounter(layout, at) || isBeltLike(s)) {
+    if (isCounter(layout, at) || isBeltLike(s) || s?.kind === 'splitter') {
       belts[at] = list[0].item;
+      for (const loser of list.slice(1)) spill(at, loser.item);
+      continue;
+    }
+    if (s?.kind === 'spring') {
+      // One item a tick goes in, by the belt rules; its first place is always free.
+      springs[at][0] = list[0].item;
       for (const loser of list.slice(1)) spill(at, loser.item);
       continue;
     }
@@ -209,6 +242,7 @@ export function step(layout: Layout, state: SimState, opts: StepOpts): { next: S
           const there = offset !== null && !blocked[cat];
           if (there && a.item.kind === 'warmMilk' && !served[cat]) {
             served[cat] = true;
+            lastServedAt[cat] = T;
             events.push({ type: 'serve', seat: cat, at, item: a.item, justInTime: offset === 0 && seats[cat].tick !== 'any' });
             continue;
           }
@@ -230,7 +264,12 @@ export function step(layout: Layout, state: SimState, opts: StepOpts): { next: S
   seats.forEach((seat: Seat, i) => {
     if (seat.bowl !== undefined) return;
     const offset = visitOffset(seat, T);
-    if (offset === null || served[i]) return;
+    if (offset === null) return;
+    if (seat.tick === 'any') {
+      // After a cup, an any-tick regular lets every cup pass for ANY_TICK_WAIT ticks.
+      const last = lastServedAt[i];
+      if (last !== null && T - last < ANY_TICK_WAIT) return;
+    } else if (served[i]) return;
     const at = counterIndex(layout, seat.col);
     const item = belts[at];
     if (!item || !matchesOrder(seat, item)) return;
@@ -240,6 +279,7 @@ export function step(layout: Layout, state: SimState, opts: StepOpts): { next: S
     }
     belts[at] = null;
     served[i] = true;
+    lastServedAt[i] = T;
     events.push({ type: 'serve', seat: i, at, item, justInTime: offset === 0 && seat.tick !== 'any' });
   });
   for (const item of ranOffEnd) {
@@ -257,9 +297,57 @@ export function step(layout: Layout, state: SimState, opts: StepOpts): { next: S
 
   // 6. Advance.
   return {
-    next: { T: T + 1, belts, plots, pending, roasting, servedThisVisit: served, blocked },
+    next: {
+      T: T + 1,
+      belts,
+      plots,
+      pending,
+      roasting,
+      servedThisVisit: served,
+      blocked,
+      lastServedAt,
+      // An empty spring is stored as nothing, so equal floors compare equal.
+      springs: Object.fromEntries(Object.entries(springs).filter(([, items]) => items.some((x) => x !== null))),
+      splitters,
+    },
     events,
   };
+}
+
+/**
+ * A splitter's outputs, clockwise from the top: every neighbour that takes
+ * items, except a piece pointing at the splitter, a machine putting out into
+ * it, another splitter, and wells and the side door, which take nothing. The
+ * counter takes items from the feeder only, so it is never an output.
+ */
+export function splitterOutputs(layout: Layout, at: number): Dir[] {
+  return DIRS.filter((d) => {
+    const j = stepFrom(layout, at, d);
+    if (j === null || isCounter(layout, j)) return false;
+    const n = layout.tiles[j];
+    if (!n) return false;
+    const back = opposite(d); // the way that points from the neighbour to the splitter
+    switch (n.kind) {
+      case 'belt':
+      case 'launch':
+      case 'catch':
+      case 'spring':
+        return n.dir !== back;
+      case 'feeder':
+        return back !== 'S';
+      case 'plot':
+      case 'kettle':
+      case 'roaster':
+      case 'mixer':
+        return n.out !== back;
+      case 'bowl':
+        return true;
+      case 'well':
+      case 'door':
+      case 'splitter':
+        return false;
+    }
+  });
 }
 
 /**

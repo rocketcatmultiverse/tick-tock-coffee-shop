@@ -26,6 +26,7 @@ export interface PanelModel {
   debug: boolean;
   spillsThisLoop: number;
   spillsLastLoop: number;
+  milk: string;
   palette: { piece: PieceKind; locked: boolean; note: string }[];
   inHand: PieceKind | 'group' | null;
   message: string;
@@ -54,6 +55,7 @@ export class Panel {
   private speed = el('select');
   private till = el('div', { className: 'till' });
   private spills = el('div');
+  private milk = el('div', { className: 'muted' });
   private palette = el('div', { className: 'palette' });
   private paletteBtns = new Map<PieceKind, HTMLButtonElement>();
   private rowBtn = el('button', { textContent: `Buy floor row (${FLOOR_ROW_PRICE})` });
@@ -87,6 +89,7 @@ export class Panel {
       el('div', { className: 'row' }, this.playBtn, this.stepBtn, this.speed),
       this.till,
       this.spills,
+      this.milk,
       el('h2', {}, 'Build'),
       this.palette,
       el('div', { className: 'row' }, this.rowBtn, this.undoBtn, this.redoBtn),
@@ -126,6 +129,7 @@ export class Panel {
     this.speed.value = String(m.speed);
     this.till.textContent = `Till: ${m.till} coins   ·   Gears: ${m.gears}`;
     this.spills.textContent = `Spills this loop: ${m.spillsThisLoop}   (last loop: ${m.spillsLastLoop})`;
+    this.milk.textContent = m.milk;
     for (const p of m.palette) {
       const b = this.paletteBtns.get(p.piece)!;
       b.textContent = `${PIECE_LABEL[p.piece]} · ${PIECE_PRICE[p.piece]}${p.note ? ' · ' + p.note : ''}`;

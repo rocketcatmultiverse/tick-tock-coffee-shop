@@ -3,24 +3,21 @@
 // it never works out what happened by comparing states.
 
 import type { Dir, Item, Roast, Structure } from '../sim/types';
-import { rowOf, colOf, isCounter, itemGlyph, tileIndex } from '../sim';
+import { clockTick, colOf, feederSlot, isCounter, itemGlyph, rowOf, slotOf, tileIndex } from '../sim';
 import { COLS } from '../sim/tuning';
 import type { Shop } from '../game/shop';
 import type { Editor, Ghost } from './editor';
-import { PAD, SHELF_W, STOOL_H, TILE, type Spot, canvasSize, tileXY } from './geometry';
+import { PAD, TILE, type Spot, canvasSize, tileXY } from './geometry';
 
 export interface StoolView {
   col: number;
   label: string;
+  /** The slot this regular wants, or "any" and the slot an any-tick regular last took from. */
+  slot: string;
   present: boolean;
   /** Took a cup on this tick: drawn highlighted. */
   servedNow: boolean;
   status: 'new' | 'seated' | 'waiting';
-}
-
-export interface ShelfCupView {
-  item: Item;
-  age: number;
 }
 
 export interface View {
@@ -30,7 +27,6 @@ export interface View {
   /** Kettle readouts: the tick its input last landed on and the roast that gave. */
   readouts: Map<number, { tick: number; roast: Roast | null }>;
   stools: StoolView[];
-  shelf: ShelfCupView[];
   cat: { spot: Spot; heart: boolean; mad: boolean } | null;
 }
 
@@ -48,8 +44,12 @@ const COLOR = {
   door: '#a67c52',
   chute: '#45a5a0',
   bowl: '#e8a0bf',
+  spring: '#d5a6bd',
+  splitter: '#76a5af',
+  // The feeder and the counter are one fixed belt, drawn unlike the belts the player lays.
   counter: '#c9a777',
-  counterArrow: '#a88a5e',
+  counterArrow: '#8a6d45',
+  slotText: '#4a3418',
   stool: '#7a6a55',
   text: '#222',
   splash: '#d0021b',
@@ -93,6 +93,9 @@ const STRUCTURE_COLOR: Record<Structure['kind'], string> = {
   mixer: COLOR.mixer,
   door: COLOR.door,
   bowl: COLOR.bowl,
+  feeder: COLOR.counter,
+  spring: COLOR.spring,
+  splitter: COLOR.splitter,
 };
 
 const STRUCTURE_LABEL: Record<Structure['kind'], string> = {
@@ -106,12 +109,16 @@ const STRUCTURE_LABEL: Record<Structure['kind'], string> = {
   mixer: 'Mix',
   door: 'Door',
   bowl: 'Bowl',
+  feeder: '',
+  spring: 'Spr',
+  splitter: 'Split',
 };
 
 function facing(s: Structure): Dir | null {
   if ('dir' in s) return s.dir;
   if ('out' in s) return s.out;
-  if (s.kind === 'door') return 'E';
+  if (s.kind === 'door') return 'W';
+  if (s.kind === 'feeder') return 'S';
   return null;
 }
 
@@ -153,7 +160,29 @@ function drawStructure(ctx: CanvasRenderingContext2D, x: number, y: number, s: S
   ctx.fillStyle = color;
   ctx.fillRect(x + 1, y + 1, TILE - 2, TILE - 2);
   const d = facing(s);
-  if (s.kind === 'belt' || s.kind === 'launch' || s.kind === 'catch') {
+  if (s.kind === 'feeder') {
+    arrow(ctx, x, y, 'S', 6, COLOR.counterArrow);
+  } else if (s.kind === 'spring') {
+    // A coil across the tile, then its direction.
+    ctx.strokeStyle = COLOR.arrow;
+    ctx.beginPath();
+    for (let k = 0; k <= 4; k++) {
+      const px = x + 8 + (k * (TILE - 16)) / 4;
+      ctx.moveTo(px, y + TILE - 12);
+      ctx.lineTo(px + 4, y + TILE - 6);
+    }
+    ctx.stroke();
+    if (d) arrow(ctx, x, y, d, 7, COLOR.arrow);
+  } else if (s.kind === 'splitter') {
+    // Arrowheads on every side: it hands items out in turn.
+    for (const dir of ['N', 'E', 'S', 'W'] as const) {
+      const off = { N: [0, -12], E: [12, 0], S: [0, 12], W: [-12, 0] }[dir];
+      ctx.save();
+      ctx.translate(off[0], off[1]);
+      arrow(ctx, x, y, dir, 4, COLOR.arrow);
+      ctx.restore();
+    }
+  } else if (s.kind === 'belt' || s.kind === 'launch' || s.kind === 'catch') {
     if (d) arrow(ctx, x, y, d, s.kind === 'belt' ? 9 : 7, COLOR.arrow);
   } else if (d) {
     outputNotch(ctx, x, y, d);
@@ -189,6 +218,15 @@ export function drawItem(ctx: CanvasRenderingContext2D, x: number, y: number, it
   ctx.fillText(itemGlyph(item), cx, cy + 1);
 }
 
+/** The slot number riding over a feeder or counter tile, in its top-left corner. */
+function slotLabel(ctx: CanvasRenderingContext2D, x: number, y: number, slot: number): void {
+  ctx.fillStyle = COLOR.slotText;
+  ctx.font = 'bold 11px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillText(String(slot), x + 3, y + 2);
+}
+
 function smallText(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, color = '#222'): void {
   ctx.fillStyle = color;
   ctx.font = '10px sans-serif';
@@ -209,6 +247,8 @@ export function draw(ctx: CanvasRenderingContext2D, view: View): void {
   const { layout, sim } = shop;
   const rows = layout.rows;
   const size = canvasSize(rows);
+  // The floor shows the tick just run, so the slots are read for that tick.
+  const shown = clockTick(sim.T - 1);
   ctx.fillStyle = COLOR.bg;
   ctx.fillRect(0, 0, size.w, size.h);
 
@@ -224,6 +264,9 @@ export function draw(ctx: CanvasRenderingContext2D, view: View): void {
       const s = layout.tiles[i];
       if (!s) continue;
       drawStructure(ctx, x, y, s);
+      if (s.kind === 'feeder') slotLabel(ctx, x, y, feederSlot(shown, row));
+      const inside = sim.springs[i]?.filter((it) => it !== null).length;
+      if (s.kind === 'spring' && inside) smallText(ctx, x, y, `${inside} in`);
       const plot = sim.plots[i];
       if (s.kind === 'plot' && plot) smallText(ctx, x, y, `grow ${plot.harvestAt - sim.T}`);
       const roast = sim.roasting[i];
@@ -266,6 +309,7 @@ export function draw(ctx: CanvasRenderingContext2D, view: View): void {
     ctx.strokeStyle = COLOR.counterArrow;
     ctx.strokeRect(x + 0.5, y + 0.5, TILE - 1, TILE - 1);
     arrow(ctx, x, y, 'E', 6, COLOR.counterArrow);
+    slotLabel(ctx, x, y, slotOf(shown, col));
   }
   ctx.fillStyle = COLOR.text;
   ctx.font = '10px sans-serif';
@@ -280,31 +324,12 @@ export function draw(ctx: CanvasRenderingContext2D, view: View): void {
     drawItem(ctx, x, y, item);
   });
 
-  // Shelf, at the end of the counter belt.
-  const shelfX = PAD + COLS * TILE + 6;
-  ctx.fillStyle = '#ddd5c4';
-  ctx.fillRect(shelfX, counterY, SHELF_W - 6, TILE);
-  ctx.fillStyle = COLOR.text;
-  ctx.fillText('Shelf', shelfX + 2, counterY - 12);
-  view.shelf.forEach((cup, k) => {
-    ctx.save();
-    ctx.translate(shelfX - TILE / 2 + 15 + k * 28, counterY);
-    drawItem(ctx, 0, 0, cup.item, 10);
-    ctx.restore();
-    ctx.fillStyle = COLOR.text;
-    ctx.font = '9px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(String(cup.age), shelfX + 15 + k * 28, counterY + TILE - 11);
-    ctx.textAlign = 'left';
-    ctx.font = '10px sans-serif';
-  });
-
   // Stools and regulars.
   const stoolY = counterY + TILE + 4;
   for (const st of view.stools) {
     const x = PAD + st.col * TILE;
     ctx.fillStyle = COLOR.stool;
-    ctx.fillRect(x + TILE / 2 - 10, stoolY + STOOL_H - 10, 20, 6);
+    ctx.fillRect(x + TILE / 2 - 10, stoolY + 30, 20, 6);
     if (st.present) {
       ctx.fillStyle = st.servedNow ? '#2e9e44' : st.status === 'waiting' ? '#999' : '#4a6fa5';
       ctx.beginPath();
@@ -323,6 +348,15 @@ export function draw(ctx: CanvasRenderingContext2D, view: View): void {
       ctx.stroke();
       ctx.setLineDash([]);
     }
+  }
+
+  // The slot each stool wants, under it.
+  for (const st of view.stools) {
+    ctx.fillStyle = COLOR.slotText;
+    ctx.font = 'bold 10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(st.slot, PAD + st.col * TILE + TILE / 2, stoolY + 50);
   }
 
   // The cat: a plain marker, with a heart when petted and a scowl when mad.
@@ -347,10 +381,10 @@ export function draw(ctx: CanvasRenderingContext2D, view: View): void {
     }
   }
 
-  // Splashes for this tick's spills.
+  // Splashes for this tick's spills. A cup that ran off the end of the counter spills there too.
   for (const e of shop.lastEvents) {
-    if (e.type !== 'spill') continue;
-    const { x, y } = indexXY(view, e.at);
+    if (e.type !== 'spill' && e.type !== 'end') continue;
+    const { x, y } = e.type === 'end' ? tileXY(rows, -1, COLS - 1) : indexXY(view, e.at);
     ctx.strokeStyle = COLOR.splash;
     ctx.lineWidth = 3;
     ctx.beginPath();
