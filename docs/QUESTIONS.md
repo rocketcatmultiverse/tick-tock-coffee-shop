@@ -357,3 +357,48 @@ addendum. Step 5 was redone under the addendum as above. Step 6 (save and
 load, offline loyalty, the morning report) was only touched so it compiles
 and validates the new pieces (Q47). Nothing was added to it.
 
+## Art pass (step 7, art only)
+
+**Q56. How much of step 7.** Spec 7 puts art, sound and the submission page
+in step 7; the request was an art pass. *Done:* the art. Sound and the
+submission page are not started.
+
+**Q57. Where the sprites come from.** The visuals canvas is a bundled export.
+Its art is plain SVG on a 60-unit tile with a wobbly ink line, so the pass
+reuses it rather than tracing it: belts, well, plot stages, kettle, mixer,
+door, items and four portraits are the canvas's own shapes and colours.
+Sprites are SVG strings (`src/ui/art/svg.ts`, `portraits.ts`) rasterised once
+per size at the screen's pixel density (`raster.ts`). The floor stays a
+Canvas 2D and the renderer still reads only state and events.
+
+**Q58. Things the canvas does not draw.** It predates the addendum, so these
+are new, drawn in its style:
+- the feeder and counter: one fixed belt, gold-trimmed with gold chevrons, so
+  it never reads as a belt you laid (the addendum asks for its own colour);
+- the spring (a brass coil), the splitter (a hub with an arrow on every
+  side), the chute (a ramp and a funnel, with a dashed hop between), the
+  roaster, the bowl and the cat;
+- the side door: the canvas's back door, set against the right-hand wall;
+- espresso beans, espresso, warm milk and café au lait. A latte became a tall
+  layered glass and an au lait a wide bowl, so the three cups differ by shape
+  as well as by colour;
+- portraits for the lamplighter, sweep, postwoman, apothecary, alchemist,
+  innkeeper, mayor and the cat.
+*Not used:* the canvas's trunk row, shelf, left-wall back door, the
+traveller and the milkman (not regulars), and its text (the clockmaker on
+"tick 5", the witch's "first latte"). None of it is a rule.
+
+**Q59. What the sprites show.** A plot shows bare soil, a sprout, a bush, then
+ripe cherries as it grows (thresholds on `GROWTH`). A kettle's needle points
+to the clock tick its last input landed on, inside the dial's roast windows,
+which is the Spec 4 readout. A roaster's window shows beans while it holds a
+batch. Machines show a spout on the side they put out on. Spills show the
+canvas's splash in the spilled item's colour.
+
+**Q60. Fonts.** The canvas uses Caveat Brush and Patrick Hand; their Latin
+files are copied from the canvas export into `src/ui/art/fonts/` rather than
+loaded from Google at run time. Both are under the SIL Open Font License,
+which asks for the licence to travel with the fonts. The official OFL files
+are in `public/licenses/` (copied into the build) and linked from the Keys
+card. Fonts are assets, not dependencies; nothing was added to package.json.
+

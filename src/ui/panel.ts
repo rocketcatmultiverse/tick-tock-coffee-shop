@@ -1,10 +1,13 @@
-// The side panel: plain DOM, rebuilt in place on every render.
+// The side panel: plain DOM, rebuilt in place on every render. Laid out as on
+// the visuals canvas: title, clock, controls, the till and the regulars, then
+// the build palette.
 
 import { roastForTick } from '../sim/items';
 import { LOOP } from '../sim/tuning';
 import { ALL_PIECES, PIECE_LABEL, type PieceKind } from '../game/pieces';
 import { FLOOR_ROW_PRICE, PIECE_PRICE } from '../game/tuning';
-import { itemColor } from './render';
+import { clockFace, spriteImg } from './art/dom';
+import { svgUrl } from './art/raster';
 
 export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -27,6 +30,8 @@ export interface PanelModel {
   spillsThisLoop: number;
   spillsLastLoop: number;
   milk: string;
+  /** "3 seated", "all seated" and the like. */
+  seated: string;
   palette: { piece: PieceKind; locked: boolean; note: string }[];
   inHand: PieceKind | 'group' | null;
   message: string;
@@ -46,26 +51,49 @@ export interface PanelActions {
   redo(): void;
 }
 
+/** The sprite each palette piece is shown with. */
+const ICON: Record<PieceKind, string> = {
+  belt: 'belt:E',
+  plot: 'plot:S:1',
+  kettle: 'kettle:S:-',
+  well: 'well',
+  spring: 'spring:E',
+  chute: 'launch:E',
+  roaster: 'roaster:S:1',
+  door: 'door',
+  mixer: 'mixer:S',
+  splitter: 'splitter',
+};
+
+const ROAST_LEGEND: [string, number, number][] = [
+  ['Light', 0, 3],
+  ['Medium', 4, 7],
+  ['Dark', 8, 11],
+];
+
 export class Panel {
   readonly root: HTMLElement;
-  private dial = el('canvas', { width: 120, height: 120, className: 'dial' });
-  private clockText = el('div', { className: 'clock-text' });
-  private playBtn = el('button');
-  private stepBtn = el('button', { textContent: 'Step ▸|' });
+  private dial = el('img', { className: 'dial', width: 120, height: 120, alt: 'The shop clock' });
+  private dialTick: number | null | undefined = undefined;
+  private tickBig = el('div', { className: 'big' });
+  private tickSmall = el('div', { className: 'muted' });
+  private playBtn = el('button', { className: 'primary' });
+  private stepBtn = el('button', { textContent: 'Step' });
   private speed = el('select');
-  private till = el('div', { className: 'till' });
-  private spills = el('div');
+  private till = el('div', { className: 'big' });
+  private gears = el('div', { className: 'muted' });
+  private seated = el('div', { className: 'big' });
+  private spills = el('div', { className: 'muted' });
   private milk = el('div', { className: 'muted' });
-  private palette = el('div', { className: 'palette' });
-  private paletteBtns = new Map<PieceKind, HTMLButtonElement>();
-  private rowBtn = el('button', { textContent: `Buy floor row (${FLOOR_ROW_PRICE})` });
+  private paletteBtns = new Map<PieceKind, { btn: HTMLButtonElement; label: HTMLSpanElement }>();
+  private rowBtn = el('button', { textContent: `Buy a floor row · ${FLOOR_ROW_PRICE}` });
   private undoBtn = el('button', { textContent: 'Undo' });
   private redoBtn = el('button', { textContent: 'Redo' });
   private message = el('div', { className: 'message' });
   private hover = el('div', { className: 'hover' });
   private bufferInfo = el('div', { className: 'muted' });
   /** Slot for the counter's own sections (regulars), filled by the app. */
-  readonly extra = el('div');
+  readonly extra = el('div', { className: 'extra' });
 
   constructor(actions: PanelActions, debug: boolean) {
     this.playBtn.onclick = () => actions.togglePause();
@@ -75,31 +103,42 @@ export class Panel {
     this.rowBtn.onclick = () => actions.buyRow();
     this.undoBtn.onclick = () => actions.undo();
     this.redoBtn.onclick = () => actions.redo();
+    const palette = el('div', { className: 'palette' });
     for (const piece of ALL_PIECES) {
-      const b = el('button', { className: 'piece' });
-      b.onclick = () => actions.pick(piece);
-      this.paletteBtns.set(piece, b);
-      this.palette.append(b);
+      const label = el('span', { className: 'piece-label' });
+      const btn = el('button', { className: 'piece' }, spriteImg(ICON[piece], 40), label);
+      btn.onclick = () => actions.pick(piece);
+      this.paletteBtns.set(piece, { btn, label });
+      palette.append(btn);
     }
+    const legend = el(
+      'div',
+      { className: 'legend' },
+      ...ROAST_LEGEND.map(([name, a, b]) => {
+        const swatch = el('span', { className: `swatch ${name.toLowerCase()}` });
+        return el('div', {}, swatch, `${name} ${a}–${b}`);
+      }),
+    );
     this.root = el(
       'aside',
       { className: 'panel' },
       el('h1', {}, 'Tick Tock Coffee Shop', debug ? el('span', { className: 'badge' }, 'debug') : ''),
-      el('div', { className: 'clock' }, this.dial, this.clockText),
-      el('div', { className: 'row' }, this.playBtn, this.stepBtn, this.speed),
-      this.till,
-      this.spills,
+      el('div', { className: 'card clock' }, this.dial, el('div', { className: 'clock-text' }, el('div', { className: 'muted' }, 'Tick'), this.tickBig, legend, this.tickSmall)),
+      el('div', { className: 'controls' }, this.playBtn, this.stepBtn, this.speed),
+      el(
+        'div',
+        { className: 'stats' },
+        el('div', { className: 'card' }, el('div', { className: 'muted' }, 'Till'), this.till, this.gears),
+        el('div', { className: 'card' }, el('div', { className: 'muted' }, 'Regulars'), this.seated, this.spills),
+      ),
       this.milk,
-      el('h2', {}, 'Build'),
-      this.palette,
-      el('div', { className: 'row' }, this.rowBtn, this.undoBtn, this.redoBtn),
-      this.bufferInfo,
+      el('div', { className: 'card build' }, el('div', { className: 'muted' }, 'Build'), palette, el('div', { className: 'row' }, this.rowBtn, this.undoBtn, this.redoBtn), this.bufferInfo),
       this.message,
       this.hover,
       this.extra,
       el(
         'details',
-        {},
+        { className: 'card keys-card' },
         el('summary', {}, 'Keys'),
         el(
           'ul',
@@ -114,6 +153,15 @@ export class Panel {
             'Space pause · . step one tick',
           ].map((t) => el('li', {}, t)),
         ),
+        el(
+          'p',
+          { className: 'credits' },
+          'Fonts: Caveat Brush and Patrick Hand, under the SIL Open Font License (',
+          el('a', { href: 'licenses/OFL-CaveatBrush.txt', target: '_blank', textContent: 'Caveat Brush' }),
+          ', ',
+          el('a', { href: 'licenses/OFL-PatrickHand.txt', target: '_blank', textContent: 'Patrick Hand' }),
+          ').',
+        ),
       ),
     );
   }
@@ -121,60 +169,32 @@ export class Panel {
   update(m: PanelModel): void {
     // The floor shows the result of the last tick run, so the clock names that tick.
     const shown = m.T - 1;
-    const t = shown >= 0 ? shown % LOOP : -1;
-    this.drawDial(t);
-    this.clockText.textContent = shown >= 0 ? `tick ${t}   (T = ${shown})` : 'not started';
-    this.playBtn.textContent = m.running ? 'Pause ❚❚' : 'Play ▶';
+    const t = shown >= 0 ? shown % LOOP : null;
+    if (t !== this.dialTick) {
+      this.dial.src = svgUrl(clockFace(t));
+      this.dialTick = t;
+    }
+    this.tickBig.textContent = t === null ? '– / 12' : `${t} / 12`;
+    this.tickSmall.textContent = t === null ? 'not started' : `${roastForTick(t)} roast · T = ${shown}`;
+    this.playBtn.textContent = m.running ? 'Pause' : 'Play';
     this.stepBtn.disabled = m.running;
     this.speed.value = String(m.speed);
-    this.till.textContent = `Till: ${m.till} coins   ·   Gears: ${m.gears}`;
-    this.spills.textContent = `Spills this loop: ${m.spillsThisLoop}   (last loop: ${m.spillsLastLoop})`;
+    this.till.textContent = `${m.till.toLocaleString()} coins`;
+    this.gears.textContent = `${m.gears.toLocaleString()} gear${m.gears === 1 ? '' : 's'} by the till`;
+    this.seated.textContent = m.seated;
+    this.spills.textContent = `spills this loop ${m.spillsThisLoop} · last ${m.spillsLastLoop}`;
     this.milk.textContent = m.milk;
     for (const p of m.palette) {
-      const b = this.paletteBtns.get(p.piece)!;
-      b.textContent = `${PIECE_LABEL[p.piece]} · ${PIECE_PRICE[p.piece]}${p.note ? ' · ' + p.note : ''}`;
-      b.disabled = p.locked;
-      b.title = p.locked ? 'Locked' : '';
-      b.classList.toggle('active', m.inHand === p.piece);
+      const { btn, label } = this.paletteBtns.get(p.piece)!;
+      label.textContent = `${PIECE_LABEL[p.piece]} · ${PIECE_PRICE[p.piece]}${p.note ? ' · ' + p.note : ''}`;
+      btn.disabled = p.locked;
+      btn.title = p.locked ? 'Locked: a regular still to come brings this one' : '';
+      btn.classList.toggle('active', m.inHand === p.piece);
     }
     this.undoBtn.disabled = !m.canUndo;
     this.redoBtn.disabled = !m.canRedo;
     this.bufferInfo.textContent = m.bufferInfo;
     this.message.textContent = m.message;
     this.hover.textContent = m.hoverInfo;
-  }
-
-  private drawDial(t: number): void {
-    const ctx = this.dial.getContext('2d');
-    if (!ctx) return;
-    const c = 60;
-    const r = 52;
-    ctx.clearRect(0, 0, 120, 120);
-    for (let k = 0; k < LOOP; k++) {
-      const a0 = ((k - 0.5) / LOOP) * Math.PI * 2 - Math.PI / 2;
-      const a1 = ((k + 0.5) / LOOP) * Math.PI * 2 - Math.PI / 2;
-      ctx.fillStyle = itemColor({ kind: 'coffee', roast: roastForTick(k) });
-      ctx.globalAlpha = k === t ? 1 : 0.55;
-      ctx.beginPath();
-      ctx.moveTo(c, c);
-      ctx.arc(c, c, r, a0, a1);
-      ctx.closePath();
-      ctx.fill();
-      ctx.globalAlpha = 1;
-      const am = (k / LOOP) * Math.PI * 2 - Math.PI / 2;
-      ctx.fillStyle = roastForTick(k) === 'light' ? '#222' : '#fff';
-      ctx.font = k === t ? 'bold 12px sans-serif' : '10px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(String(k), c + Math.cos(am) * (r - 11), c + Math.sin(am) * (r - 11));
-    }
-    const a = (t / LOOP) * Math.PI * 2 - Math.PI / 2;
-    ctx.strokeStyle = '#d0021b';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(c, c);
-    ctx.lineTo(c + Math.cos(a) * (r - 22), c + Math.sin(a) * (r - 22));
-    ctx.stroke();
-    ctx.lineWidth = 1;
   }
 }

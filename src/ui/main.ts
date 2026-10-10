@@ -10,7 +10,8 @@ import { REGULARS } from '../levels/regulars';
 import { catSpot } from './cat';
 import { CatCard } from './catCard';
 import { RegularsPanel } from './regularsPanel';
-import { StripView, shortName } from './strip';
+import { StripView } from './strip';
+import { SpriteBank } from './art/raster';
 import { Editor } from './editor';
 import { canvasSize, type Spot } from './geometry';
 import { bindInput } from './input';
@@ -31,6 +32,8 @@ class App {
   private timer: number | undefined;
   private readouts = new Map<number, { tick: number; roast: Roast | null }>();
   private canvas = el('canvas', { className: 'floor' });
+  /** Sprites are rasterised once and redrawn when they arrive. */
+  private sprites = new SpriteBank(() => this.render());
   private ctx: CanvasRenderingContext2D;
   private panel: Panel;
   private stripView = new StripView();
@@ -103,6 +106,8 @@ class App {
     }
     this.schedule();
     this.render();
+    // The canvas draws text in the canvas's own fonts; redraw once they have loaded.
+    document.fonts?.ready.then(() => this.render());
   }
 
   private save(): void {
@@ -197,6 +202,14 @@ class App {
     return last === null ? 'any' : `any·${slotOf(last, seat.col)}`;
   }
 
+  /** How many of the regulars who have walked in are seated. */
+  private seatedInfo(): string {
+    const regs = this.shop.regulars;
+    const seated = regs.filter((r) => r.status === 'seated').length;
+    if (seated === this.shop.defs.length) return 'all seated';
+    return `${seated} seated${regs.length > seated ? ` · ${regs.length - seated} not` : ''}`;
+  }
+
   /** The milk order: how many pails, and from which tick. */
   private milkInfo(): string {
     const n = this.shop.milkOrder();
@@ -216,10 +229,15 @@ class App {
 
   render(): void {
     const size = canvasSize(this.shop.layout.rows);
-    if (this.canvas.width !== size.w || this.canvas.height !== size.h) {
-      this.canvas.width = size.w;
-      this.canvas.height = size.h;
+    // Draw at the screen's own pixel density so the hand-drawn lines stay crisp.
+    const dpr = window.devicePixelRatio || 1;
+    if (this.canvas.width !== Math.round(size.w * dpr) || this.canvas.height !== Math.round(size.h * dpr)) {
+      this.canvas.width = Math.round(size.w * dpr);
+      this.canvas.height = Math.round(size.h * dpr);
+      this.canvas.style.width = `${size.w}px`;
+      this.canvas.style.height = `${size.h}px`;
     }
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const view: View = {
       shop: this.shop,
       editor: this.editor,
@@ -231,7 +249,7 @@ class App {
         .filter(({ seat }) => seat.bowl === undefined)
         .map(({ seat, i }) => ({
           col: seat.col,
-          label: shortName(this.shop.defs[i].name).slice(0, 2),
+          id: this.shop.defs[i].id,
           slot: this.stoolSlot(i),
           // The floor shows the tick just run, so presence is read for that tick.
           present: this.shop.T > 0 && isPresent(seat, this.shop.T - 1),
@@ -239,6 +257,8 @@ class App {
           status: this.shop.regulars[i].status,
         })),
       cat: { spot: this.catAt(), heart: this.catCard.heart, mad: this.catMad() },
+      sprites: this.sprites,
+      dpr,
     };
     draw(this.ctx, view);
     const rights = this.shop.rights();
@@ -254,6 +274,7 @@ class App {
       spillsThisLoop: this.shop.spillsThisLoop,
       spillsLastLoop: this.shop.spillsLastLoop,
       milk: this.milkInfo(),
+      seated: this.seatedInfo(),
       palette: ALL_PIECES.map((piece) => ({
         piece,
         locked: !rights.unlocked.has(piece),

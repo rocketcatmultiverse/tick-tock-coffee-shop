@@ -1,14 +1,18 @@
 // Where things are on the floor canvas. North is up, so back-room row 0 is
-// drawn just above the counter and higher rows further up.
+// drawn just above the counter and higher rows further up. Below the counter
+// belt are its wooden edge and the stools.
 
 import { COLS } from '../sim/tuning';
 
 export const TILE = 48;
-export const PAD = 8;
-export const STOOL_H = 54;
+export const PAD = 10;
+/** The wooden edge of the counter, under its belt. */
+export const WOOD_H = 16;
+/** The stools and the regulars sitting at them. */
+export const STOOL_H = 66;
 
 export function canvasSize(rows: number): { w: number; h: number } {
-  return { w: PAD * 2 + COLS * TILE, h: PAD * 2 + (rows + 1) * TILE + STOOL_H };
+  return { w: PAD * 2 + COLS * TILE, h: PAD * 2 + (rows + 1) * TILE + WOOD_H + STOOL_H };
 }
 
 /** Top-left pixel of a tile. Row -1 is the counter. */

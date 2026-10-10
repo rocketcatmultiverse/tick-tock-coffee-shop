@@ -1,17 +1,21 @@
-// Gray-box canvas renderer: flat coloured tiles and plain text labels. It
-// draws the state as it stands and the events of the last tick (splashes);
-// it never works out what happened by comparing states.
+// The floor renderer: sprites from the visuals canvas (src/ui/art/) on a
+// Canvas 2D. It draws the state as it stands and the events of the last tick
+// (splashes); it never works out what happened by comparing states.
 
-import type { Dir, Item, Roast, Structure } from '../sim/types';
-import { clockTick, colOf, feederSlot, isCounter, itemGlyph, rowOf, slotOf, tileIndex } from '../sim';
-import { COLS } from '../sim/tuning';
+import type { Roast, Structure } from '../sim/types';
+import { clockTick, colOf, feederSlot, isCounter, rowOf, slotOf, tileIndex } from '../sim';
+import { COLS, GROWTH } from '../sim/tuning';
 import type { Shop } from '../game/shop';
 import type { Editor, Ghost } from './editor';
-import { PAD, TILE, type Spot, canvasSize, tileXY } from './geometry';
+import { PAD, STOOL_H, TILE, WOOD_H, type Spot, canvasSize, tileXY } from './geometry';
+import { PAL, type PlotStage, type TileLook, itemKey, splashKey, spriteBody, structureKey } from './art/svg';
+import { portraitBody } from './art/portraits';
+import type { SpriteBank } from './art/raster';
 
 export interface StoolView {
   col: number;
-  label: string;
+  /** Regular id, which names their portrait. */
+  id: string;
   /** The slot this regular wants, or "any" and the slot an any-tick regular last took from. */
   slot: string;
   present: boolean;
@@ -28,211 +32,50 @@ export interface View {
   readouts: Map<number, { tick: number; roast: Roast | null }>;
   stools: StoolView[];
   cat: { spot: Spot; heart: boolean; mad: boolean } | null;
+  sprites: SpriteBank;
+  /** Device pixels per CSS pixel; sprites are rasterised at this density. */
+  dpr: number;
 }
 
-const COLOR = {
-  bg: '#f4f1ea',
-  floor: '#e6e2d8',
-  grid: '#cfc9bc',
-  belt: '#bdb7ab',
-  arrow: '#6e685d',
-  well: '#6fa8dc',
-  plot: '#93c47d',
-  kettle: '#e69138',
-  roaster: '#cc4125',
-  mixer: '#8e7cc3',
-  door: '#a67c52',
-  chute: '#45a5a0',
-  bowl: '#e8a0bf',
-  spring: '#d5a6bd',
-  splitter: '#76a5af',
-  // The feeder and the counter are one fixed belt, drawn unlike the belts the player lays.
-  counter: '#c9a777',
-  counterArrow: '#8a6d45',
-  slotText: '#4a3418',
-  stool: '#7a6a55',
-  text: '#222',
-  splash: '#d0021b',
-  select: '#1f6feb',
-  ghostBad: 'rgba(208, 2, 27, 0.35)',
-};
+const BODY_FONT = "'Patrick Hand', 'Comic Sans MS', cursive";
 
-const ROAST_COLOR: Record<Roast, string> = { light: '#d9b382', medium: '#8b5a2b', dark: '#3b2314' };
-
-export function itemColor(item: Item): string {
-  switch (item.kind) {
-    case 'water':
-      return '#3d85c6';
-    case 'beans':
-      return '#7f6000';
-    case 'milk':
-      return '#ffffff';
-    case 'warmMilk':
-      return '#fff2cc';
-    default:
-      return ROAST_COLOR[item.roast];
-  }
+/** Draw a 60-unit floor sprite into a square of `size` CSS pixels at (x, y). */
+function blit(ctx: CanvasRenderingContext2D, view: View, key: string, x: number, y: number, size = TILE): void {
+  const px = Math.round(size * view.dpr);
+  const img = view.sprites.get(key, px, px, () => ({ body: spriteBody(key), viewBox: 60 }));
+  if (img) ctx.drawImage(img, x, y, size, size);
 }
 
-function textOn(bg: string): string {
-  const hex = bg.replace('#', '');
-  const r = parseInt(hex.slice(0, 2), 16);
-  const g = parseInt(hex.slice(2, 4), 16);
-  const b = parseInt(hex.slice(4, 6), 16);
-  return r * 0.3 + g * 0.59 + b * 0.11 > 150 ? '#222' : '#fff';
+/** A regular's round portrait, `size` CSS pixels across. */
+export function drawPortrait(ctx: CanvasRenderingContext2D, view: View, id: string, x: number, y: number, size: number): void {
+  const px = Math.round(size * view.dpr);
+  const img = view.sprites.get(`portrait:${id}`, px, px, () => ({ body: portraitBody(id), viewBox: 160, seed: 23 }));
+  if (img) ctx.drawImage(img, x, y, size, size);
 }
 
-const STRUCTURE_COLOR: Record<Structure['kind'], string> = {
-  belt: COLOR.belt,
-  launch: COLOR.chute,
-  catch: COLOR.chute,
-  well: COLOR.well,
-  plot: COLOR.plot,
-  kettle: COLOR.kettle,
-  roaster: COLOR.roaster,
-  mixer: COLOR.mixer,
-  door: COLOR.door,
-  bowl: COLOR.bowl,
-  feeder: COLOR.counter,
-  spring: COLOR.spring,
-  splitter: COLOR.splitter,
-};
-
-const STRUCTURE_LABEL: Record<Structure['kind'], string> = {
-  belt: '',
-  launch: 'Lch',
-  catch: 'Cat',
-  well: 'Well',
-  plot: 'Plot',
-  kettle: 'Ktl',
-  roaster: 'Rst',
-  mixer: 'Mix',
-  door: 'Door',
-  bowl: 'Bowl',
-  feeder: '',
-  spring: 'Spr',
-  splitter: 'Split',
-};
-
-function facing(s: Structure): Dir | null {
-  if ('dir' in s) return s.dir;
-  if ('out' in s) return s.out;
-  if (s.kind === 'door') return 'W';
-  if (s.kind === 'feeder') return 'S';
-  return null;
+function text(
+  ctx: CanvasRenderingContext2D,
+  s: string,
+  x: number,
+  y: number,
+  opts: { size?: number; color?: string; align?: CanvasTextAlign; base?: CanvasTextBaseline; font?: string } = {},
+): void {
+  ctx.font = `${opts.size ?? 13}px ${opts.font ?? BODY_FONT}`;
+  ctx.fillStyle = opts.color ?? PAL.cream;
+  ctx.textAlign = opts.align ?? 'center';
+  ctx.textBaseline = opts.base ?? 'middle';
+  ctx.fillText(s, x, y);
 }
 
-/** A triangle pointing `d`, centred in the tile at (x, y). */
-function arrow(ctx: CanvasRenderingContext2D, x: number, y: number, d: Dir, size: number, color: string): void {
-  const cx = x + TILE / 2;
-  const cy = y + TILE / 2;
-  const pts: [number, number][] = [
-    [0, -size],
-    [size * 0.8, size * 0.6],
-    [-size * 0.8, size * 0.6],
-  ];
-  const angle = { N: 0, E: Math.PI / 2, S: Math.PI, W: -Math.PI / 2 }[d];
-  ctx.fillStyle = color;
+/** A small dark tag in a tile's corner: slot numbers, batch ages. */
+function tag(ctx: CanvasRenderingContext2D, s: string, x: number, y: number, color: string = PAL.gold): void {
+  ctx.font = `12px ${BODY_FONT}`;
+  const w = Math.max(16, ctx.measureText(s).width + 8);
+  ctx.fillStyle = 'rgba(36, 28, 38, 0.82)';
   ctx.beginPath();
-  pts.forEach(([px, py], i) => {
-    const rx = px * Math.cos(angle) - py * Math.sin(angle);
-    const ry = px * Math.sin(angle) + py * Math.cos(angle);
-    if (i === 0) ctx.moveTo(cx + rx, cy + ry);
-    else ctx.lineTo(cx + rx, cy + ry);
-  });
-  ctx.closePath();
+  ctx.roundRect(x, y, w, 15, 7);
   ctx.fill();
-}
-
-/** A small notch on the edge a machine puts out on. */
-function outputNotch(ctx: CanvasRenderingContext2D, x: number, y: number, d: Dir): void {
-  ctx.fillStyle = '#222';
-  const n = 8;
-  const m = TILE / 2 - n / 2;
-  if (d === 'N') ctx.fillRect(x + m, y, n, 4);
-  if (d === 'S') ctx.fillRect(x + m, y + TILE - 4, n, 4);
-  if (d === 'E') ctx.fillRect(x + TILE - 4, y + m, 4, n);
-  if (d === 'W') ctx.fillRect(x, y + m, 4, n);
-}
-
-function drawStructure(ctx: CanvasRenderingContext2D, x: number, y: number, s: Structure): void {
-  const color = STRUCTURE_COLOR[s.kind];
-  ctx.fillStyle = color;
-  ctx.fillRect(x + 1, y + 1, TILE - 2, TILE - 2);
-  const d = facing(s);
-  if (s.kind === 'feeder') {
-    arrow(ctx, x, y, 'S', 6, COLOR.counterArrow);
-  } else if (s.kind === 'spring') {
-    // A coil across the tile, then its direction.
-    ctx.strokeStyle = COLOR.arrow;
-    ctx.beginPath();
-    for (let k = 0; k <= 4; k++) {
-      const px = x + 8 + (k * (TILE - 16)) / 4;
-      ctx.moveTo(px, y + TILE - 12);
-      ctx.lineTo(px + 4, y + TILE - 6);
-    }
-    ctx.stroke();
-    if (d) arrow(ctx, x, y, d, 7, COLOR.arrow);
-  } else if (s.kind === 'splitter') {
-    // Arrowheads on every side: it hands items out in turn.
-    for (const dir of ['N', 'E', 'S', 'W'] as const) {
-      const off = { N: [0, -12], E: [12, 0], S: [0, 12], W: [-12, 0] }[dir];
-      ctx.save();
-      ctx.translate(off[0], off[1]);
-      arrow(ctx, x, y, dir, 4, COLOR.arrow);
-      ctx.restore();
-    }
-  } else if (s.kind === 'belt' || s.kind === 'launch' || s.kind === 'catch') {
-    if (d) arrow(ctx, x, y, d, s.kind === 'belt' ? 9 : 7, COLOR.arrow);
-  } else if (d) {
-    outputNotch(ctx, x, y, d);
-  }
-  const label = STRUCTURE_LABEL[s.kind];
-  if (label) {
-    ctx.fillStyle = textOn(color);
-    ctx.font = '10px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    ctx.fillText(label, x + 4, y + 4);
-  }
-}
-
-export function drawItem(ctx: CanvasRenderingContext2D, x: number, y: number, item: Item, r = 11): void {
-  const cx = x + TILE / 2;
-  const cy = y + TILE / 2;
-  const color = itemColor(item);
-  ctx.fillStyle = color;
-  ctx.strokeStyle = '#333';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  // Drinks are round; ingredients are square.
-  const drink = ['coffee', 'espresso', 'warmMilk', 'auLait', 'latte'].includes(item.kind);
-  if (drink) ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  else ctx.rect(cx - r * 0.85, cy - r * 0.85, r * 1.7, r * 1.7);
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = textOn(color);
-  ctx.font = 'bold 10px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(itemGlyph(item), cx, cy + 1);
-}
-
-/** The slot number riding over a feeder or counter tile, in its top-left corner. */
-function slotLabel(ctx: CanvasRenderingContext2D, x: number, y: number, slot: number): void {
-  ctx.fillStyle = COLOR.slotText;
-  ctx.font = 'bold 11px sans-serif';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'top';
-  ctx.fillText(String(slot), x + 3, y + 2);
-}
-
-function smallText(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, color = '#222'): void {
-  ctx.fillStyle = color;
-  ctx.font = '10px sans-serif';
-  ctx.textAlign = 'right';
-  ctx.textBaseline = 'bottom';
-  ctx.fillText(text, x + TILE - 4, y + TILE - 3);
+  text(ctx, s, x + w / 2, y + 8, { size: 12, color });
 }
 
 /** Pixel of any simulator tile index, back room or counter. */
@@ -242,6 +85,36 @@ function indexXY(view: View, index: number): { x: number; y: number } {
   return tileXY(layout.rows, rowOf(index), colOf(index));
 }
 
+/** How a tile looks right now: a plot's growth, a kettle's needle, a roaster's window. */
+function lookOf(view: View, i: number, s: Structure): TileLook {
+  const sim = view.shop.sim;
+  if (s.kind === 'plot') {
+    const p = sim.plots[i];
+    if (!p) return { plotStage: 0 };
+    const grown = 1 - (p.harvestAt - sim.T) / GROWTH;
+    const stage: PlotStage = grown < 0.4 ? 1 : grown < 0.75 ? 2 : 3;
+    return { plotStage: stage };
+  }
+  if (s.kind === 'kettle') return { kettleTick: view.readouts.get(i)?.tick ?? null };
+  if (s.kind === 'roaster') return { roasterFull: !!sim.roasting[i] };
+  return {};
+}
+
+function floorSprite(view: View, rows: number): HTMLCanvasElement | null {
+  const w = COLS * TILE;
+  const h = rows * TILE;
+  const grid =
+    Array.from({ length: COLS - 1 }, (_, k) => `M${(k + 1) * 60} 0V${rows * 60}`).join('') +
+    Array.from({ length: rows - 1 }, (_, k) => `M0 ${(k + 1) * 60}H720`).join('');
+  return view.sprites.get(`floor:${rows}`, Math.round(w * view.dpr), Math.round(h * view.dpr), () => ({
+    viewBox: 720,
+    seed: 4,
+    body:
+      `<rect x="-10" y="-10" width="740" height="${rows * 60 + 20}" fill="${PAL.floor}" stroke="none"/>` +
+      `<path d="${grid}" stroke="${PAL.floorLine}" stroke-width="2"/>`,
+  }));
+}
+
 export function draw(ctx: CanvasRenderingContext2D, view: View): void {
   const { shop, editor } = view;
   const { layout, sim } = shop;
@@ -249,40 +122,51 @@ export function draw(ctx: CanvasRenderingContext2D, view: View): void {
   const size = canvasSize(rows);
   // The floor shows the tick just run, so the slots are read for that tick.
   const shown = clockTick(sim.T - 1);
-  ctx.fillStyle = COLOR.bg;
-  ctx.fillRect(0, 0, size.w, size.h);
 
-  // Back room.
+  ctx.fillStyle = PAL.night;
+  ctx.fillRect(0, 0, size.w, size.h);
+  const floorW = COLS * TILE;
+  const counterY = tileXY(rows, -1, 0).y;
+
+  // The room: tan floor, then the counter's dark strip, its wooden edge and the stools.
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(PAD, PAD, floorW, size.h - 2 * PAD, 14);
+  ctx.clip();
+  const floor = floorSprite(view, rows);
+  if (floor) ctx.drawImage(floor, PAD, PAD, floorW, rows * TILE);
+  else {
+    ctx.fillStyle = PAL.floor;
+    ctx.fillRect(PAD, PAD, floorW, rows * TILE);
+  }
+  ctx.fillStyle = PAL.track;
+  ctx.fillRect(PAD, counterY, floorW, TILE);
+  ctx.fillStyle = PAL.wood;
+  ctx.fillRect(PAD, counterY + TILE, floorW, WOOD_H);
+  ctx.fillStyle = PAL.woodTop;
+  ctx.fillRect(PAD, counterY + TILE, floorW, 4);
+  ctx.fillStyle = PAL.stools;
+  ctx.fillRect(PAD, counterY + TILE + WOOD_H, floorW, STOOL_H);
+  ctx.restore();
+
+  // Structures, and what they are doing.
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < COLS; col++) {
-      const { x, y } = tileXY(rows, row, col);
-      ctx.fillStyle = COLOR.floor;
-      ctx.fillRect(x, y, TILE, TILE);
-      ctx.strokeStyle = COLOR.grid;
-      ctx.strokeRect(x + 0.5, y + 0.5, TILE - 1, TILE - 1);
       const i = tileIndex(row, col);
       const s = layout.tiles[i];
       if (!s) continue;
-      drawStructure(ctx, x, y, s);
-      if (s.kind === 'feeder') slotLabel(ctx, x, y, feederSlot(shown, row));
-      const inside = sim.springs[i]?.filter((it) => it !== null).length;
-      if (s.kind === 'spring' && inside) smallText(ctx, x, y, `${inside} in`);
-      const plot = sim.plots[i];
-      if (s.kind === 'plot' && plot) smallText(ctx, x, y, `grow ${plot.harvestAt - sim.T}`);
+      const { x, y } = tileXY(rows, row, col);
+      blit(ctx, view, structureKey(s, lookOf(view, i, s)), x, y);
+      if (s.kind === 'feeder') tag(ctx, String(feederSlot(shown, row)), x + 2, y + 2);
       const roast = sim.roasting[i];
-      if (s.kind === 'roaster' && roast) smallText(ctx, x, y, `in ${sim.T - roast.since}`, '#fff');
-      const ro = view.readouts.get(i);
-      if (s.kind === 'kettle' && ro) smallText(ctx, x, y, `t${ro.tick}${ro.roast ? ' ' + ro.roast[0].toUpperCase() : ''}`);
+      if (s.kind === 'roaster' && roast) tag(ctx, `in ${sim.T - roast.since}`, x + 2, y + TILE - 17, PAL.cream);
+      const inside = sim.springs[i]?.filter((it) => it !== null).length;
+      if (s.kind === 'spring' && inside) tag(ctx, `${inside}`, x + TILE - 18, y + 2, PAL.cream);
       const pend = sim.pending[i];
-      if (pend) {
-        ctx.save();
-        ctx.translate(x + TILE * 0.25, y - TILE * 0.05);
-        drawItem(ctx, 0, 0, pend.item, 7);
-        ctx.restore();
-      }
+      if (pend) blit(ctx, view, itemKey(pend.item), x + TILE * 0.5, y - TILE * 0.08, TILE * 0.55);
     }
   }
-  // Chute spans: a dashed line from launch to catch.
+  // Chute spans: a dashed hop from launch to catch.
   for (let i = 0; i < layout.tiles.length; i++) {
     const s = layout.tiles[i];
     if (s?.kind !== 'launch') continue;
@@ -290,112 +174,97 @@ export function draw(ctx: CanvasRenderingContext2D, view: View): void {
     const dr = s.dir === 'N' ? 2 : s.dir === 'S' ? -2 : 0;
     const dc = s.dir === 'E' ? 2 : s.dir === 'W' ? -2 : 0;
     const b = tileXY(rows, rowOf(i) + dr, colOf(i) + dc);
+    const ax = a.x + TILE / 2;
+    const ay = a.y + TILE / 2;
+    const bx = b.x + TILE / 2;
+    const by = b.y + TILE / 2;
     ctx.save();
-    ctx.setLineDash([4, 4]);
-    ctx.strokeStyle = COLOR.chute;
-    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    ctx.strokeStyle = PAL.cream;
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
-    ctx.moveTo(a.x + TILE / 2, a.y + TILE / 2);
-    ctx.lineTo(b.x + TILE / 2, b.y + TILE / 2);
+    ctx.moveTo(ax, ay);
+    // Bow the hop sideways so it reads as a jump over the middle tile.
+    ctx.quadraticCurveTo((ax + bx) / 2 + (by - ay) * 0.35, (ay + by) / 2 + (bx - ax) * 0.35, bx, by);
     ctx.stroke();
     ctx.restore();
   }
 
-  // Counter.
+  // The feeder carries on along the counter as one fixed belt, slot numbers riding along.
   for (let col = 0; col < COLS; col++) {
     const { x, y } = tileXY(rows, -1, col);
-    ctx.fillStyle = COLOR.counter;
-    ctx.fillRect(x, y, TILE, TILE);
-    ctx.strokeStyle = COLOR.counterArrow;
-    ctx.strokeRect(x + 0.5, y + 0.5, TILE - 1, TILE - 1);
-    arrow(ctx, x, y, 'E', 6, COLOR.counterArrow);
-    slotLabel(ctx, x, y, slotOf(shown, col));
+    blit(ctx, view, 'fixed:E', x, y);
+    tag(ctx, String(slotOf(shown, col)), x + 2, y + 2);
   }
-  ctx.fillStyle = COLOR.text;
-  ctx.font = '10px sans-serif';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'top';
-  const counterY = tileXY(rows, -1, 0).y;
 
   // Items on belts and the counter.
   sim.belts.forEach((item, i) => {
     if (!item) return;
     const { x, y } = indexXY(view, i);
-    drawItem(ctx, x, y, item);
+    blit(ctx, view, itemKey(item), x, y);
   });
 
-  // Stools and regulars.
-  const stoolY = counterY + TILE + 4;
-  for (const st of view.stools) {
-    const x = PAD + st.col * TILE;
-    ctx.fillStyle = COLOR.stool;
-    ctx.fillRect(x + TILE / 2 - 10, stoolY + 30, 20, 6);
-    if (st.present) {
-      ctx.fillStyle = st.servedNow ? '#2e9e44' : st.status === 'waiting' ? '#999' : '#4a6fa5';
-      ctx.beginPath();
-      ctx.arc(x + TILE / 2, stoolY + 14, 13, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 11px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(st.label, x + TILE / 2, stoolY + 15);
-    } else {
-      ctx.strokeStyle = '#aaa';
-      ctx.setLineDash([3, 3]);
-      ctx.beginPath();
-      ctx.arc(x + TILE / 2, stoolY + 14, 13, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
-  }
+  drawStools(ctx, view, counterY + TILE + WOOD_H);
 
-  // The slot each stool wants, under it.
-  for (const st of view.stools) {
-    ctx.fillStyle = COLOR.slotText;
-    ctx.font = 'bold 10px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText(st.slot, PAD + st.col * TILE + TILE / 2, stoolY + 50);
-  }
-
-  // The cat: a plain marker, with a heart when petted and a scowl when mad.
+  // Your cat, with a heart when petted and a cross mark when it is mad at you.
   if (view.cat && view.cat.spot.row < rows) {
     const { x, y } = tileXY(rows, view.cat.spot.row, view.cat.spot.col);
-    ctx.fillStyle = view.cat.mad ? '#b00020' : '#222';
-    ctx.beginPath();
-    ctx.moveTo(x + TILE - 16, y + 6);
-    ctx.lineTo(x + TILE - 4, y + 6);
-    ctx.lineTo(x + TILE - 10, y + 16);
-    ctx.closePath();
-    ctx.fill();
-    ctx.font = 'bold 12px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    if (view.cat.heart) {
-      ctx.fillStyle = '#e0245e';
-      ctx.fillText('♥', x + TILE - 10, y + 6);
-    } else if (view.cat.mad) {
-      ctx.fillStyle = '#b00020';
-      ctx.fillText('!', x + TILE - 10, y + 6);
-    }
+    blit(ctx, view, 'cat', x + TILE * 0.3, y + TILE * 0.25, TILE * 0.75);
+    if (view.cat.heart) text(ctx, '♥', x + TILE * 0.68, y + 6, { size: 20, color: '#e0245e' });
+    else if (view.cat.mad) text(ctx, '!', x + TILE * 0.68, y + 6, { size: 22, color: PAL.cherry, font: "'Caveat Brush', cursive" });
   }
 
-  // Splashes for this tick's spills. A cup that ran off the end of the counter spills there too.
+  // Splashes for this tick's spills, and for a cup that ran off the end of the counter.
   for (const e of shop.lastEvents) {
     if (e.type !== 'spill' && e.type !== 'end') continue;
     const { x, y } = e.type === 'end' ? tileXY(rows, -1, COLS - 1) : indexXY(view, e.at);
-    ctx.strokeStyle = COLOR.splash;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(x + 10, y + 10);
-    ctx.lineTo(x + TILE - 10, y + TILE - 10);
-    ctx.moveTo(x + TILE - 10, y + 10);
-    ctx.lineTo(x + 10, y + TILE - 10);
-    ctx.stroke();
-    ctx.lineWidth = 1;
+    blit(ctx, view, splashKey(e.item), x, y);
   }
 
+  drawEditing(ctx, view, editor, rows);
+}
+
+function drawStools(ctx: CanvasRenderingContext2D, view: View, top: number): void {
+  for (const st of view.stools) {
+    const cx = PAD + st.col * TILE + TILE / 2;
+    // The stool: a round wooden seat on two legs.
+    ctx.strokeStyle = PAL.ink;
+    ctx.lineWidth = 2;
+    ctx.fillStyle = PAL.woodTop;
+    ctx.fillRect(cx - 9, top + 34, 4, 16);
+    ctx.fillRect(cx + 5, top + 34, 4, 16);
+    ctx.beginPath();
+    ctx.ellipse(cx, top + 34, 14, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    const r = 18;
+    if (st.present) {
+      ctx.save();
+      if (st.status === 'waiting') ctx.globalAlpha = 0.55;
+      drawPortrait(ctx, view, st.id, cx - r, top + 2, r * 2);
+      ctx.restore();
+      if (st.servedNow) {
+        ctx.strokeStyle = PAL.gold;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(cx, top + 2 + r, r + 2, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    } else {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(205, 189, 176, 0.45)';
+      ctx.setLineDash([3, 4]);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, top + 2 + r, r - 2, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+    text(ctx, st.slot, cx, top + STOOL_H - 8, { size: 13, color: PAL.muted });
+  }
+}
+
+function drawEditing(ctx: CanvasRenderingContext2D, view: View, editor: Editor, rows: number): void {
   // Selection box.
   const sel = editor.selection;
   if (sel) {
@@ -403,49 +272,50 @@ export function draw(ctx: CanvasRenderingContext2D, view: View): void {
     const w = (sel.c1 - sel.c0 + 1) * TILE;
     const h = (sel.r1 - sel.r0 + 1) * TILE;
     ctx.save();
-    ctx.strokeStyle = COLOR.select;
-    ctx.setLineDash([6, 4]);
-    ctx.lineWidth = 2;
-    ctx.strokeRect(a.x + 1, a.y + 1, w - 2, h - 2);
-    ctx.fillStyle = 'rgba(31, 111, 235, 0.08)';
+    ctx.fillStyle = 'rgba(230, 180, 80, 0.14)';
     ctx.fillRect(a.x, a.y, w, h);
+    ctx.strokeStyle = PAL.gold;
+    ctx.setLineDash([7, 5]);
+    ctx.lineWidth = 2.5;
+    ctx.strokeRect(a.x + 1, a.y + 1, w - 2, h - 2);
     ctx.restore();
   }
 
   // Hover and the ghost of whatever is in hand.
-  if (view.hover) {
-    const ghost: Ghost | null = view.hover.row >= 0 ? editor.ghost(view.hover.row, view.hover.col) : null;
-    if (ghost) {
-      ctx.save();
-      ctx.globalAlpha = 0.55;
-      for (const ch of ghost.changes) {
-        if (!ch.to) continue;
-        const { x, y } = indexXY(view, ch.index);
-        drawStructure(ctx, x, y, ch.to);
-        if (ghost.reason) {
-          ctx.fillStyle = COLOR.ghostBad;
-          ctx.fillRect(x, y, TILE, TILE);
-        }
+  if (!view.hover) return;
+  const ghost: Ghost | null = view.hover.row >= 0 ? editor.ghost(view.hover.row, view.hover.col) : null;
+  if (ghost) {
+    ctx.save();
+    ctx.globalAlpha = 0.6;
+    for (const ch of ghost.changes) {
+      if (!ch.to) continue;
+      const { x, y } = indexXY(view, ch.index);
+      blit(ctx, view, structureKey(ch.to), x, y);
+      if (ghost.reason) {
+        ctx.fillStyle = 'rgba(200, 85, 61, 0.45)';
+        ctx.fillRect(x, y, TILE, TILE);
       }
-      ctx.restore();
     }
-    const { x, y } = tileXY(rows, view.hover.row, view.hover.col);
-    ctx.strokeStyle = ghost?.reason ? COLOR.splash : '#000';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(x + 1, y + 1, TILE - 2, TILE - 2);
-    ctx.lineWidth = 1;
-    if (ghost?.reason) {
-      ctx.font = 'bold 11px sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'bottom';
-      const tw = ctx.measureText(ghost.reason).width;
-      const tx = Math.min(x, PAD + COLS * TILE - tw - 8);
-      const ty = y < 24 ? y + TILE + 16 : y; // below the tile when there is no room above
-      ctx.fillStyle = 'rgba(255,255,255,0.9)';
-      ctx.fillRect(tx, ty - 16, tw + 8, 15);
-      ctx.fillStyle = COLOR.splash;
-      ctx.fillText(ghost.reason, tx + 4, ty - 3);
-    }
+    ctx.restore();
+  }
+  const { x, y } = tileXY(rows, view.hover.row, view.hover.col);
+  ctx.strokeStyle = ghost?.reason ? PAL.cherry : PAL.cream;
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.roundRect(x + 2, y + 2, TILE - 4, TILE - 4, 8);
+  ctx.stroke();
+  if (ghost?.reason) {
+    ctx.font = `15px ${BODY_FONT}`;
+    const tw = ctx.measureText(ghost.reason).width;
+    const tx = Math.max(PAD, Math.min(x, PAD + COLS * TILE - tw - 14));
+    const ty = y < 30 ? y + TILE + 4 : y - 26;
+    ctx.fillStyle = PAL.night;
+    ctx.strokeStyle = PAL.line;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(tx, ty, tw + 14, 22, 8);
+    ctx.fill();
+    ctx.stroke();
+    text(ctx, ghost.reason, tx + 7, ty + 11, { size: 15, align: 'left', color: PAL.cream });
   }
 }
-

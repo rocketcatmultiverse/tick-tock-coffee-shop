@@ -6,7 +6,7 @@ A browser puzzle-automation game for a two-week game jam: a cozy alchemical coff
 
 - `docs/SPEC.md` is the source of truth. Its "Rules" sections are a contract: implement them exactly as written.
 - `docs/ADDENDUM-*.md` files override the spec wherever they differ. Read them in number order after the spec; the highest number wins.
-- The visuals canvas, `docs/Tick Tock Coffee Shop visuals.html` (a bundled export; `docs/Tick Tock Coffee Shop visuals.pdf` is a static render of it), is the reference for palette and look only. It predates the addendum: it still shows a trunk row and a shelf and has no feeder, spring, splitter or side door. It is never a source of rules, and art waits for step 7.
+- The visuals canvas, `docs/Tick Tock Coffee Shop visuals.html` (a bundled export; `docs/Tick Tock Coffee Shop visuals.pdf` is a static render of it), is the reference for palette and look only. It predates the addendum: it still shows a trunk row and a shelf and has no feeder, spring, splitter or side door. It is never a source of rules. Step 7's art pass (`src/ui/art/`) is drawn from it.
 - If the spec is ambiguous, contradicts itself, or a rule looks wrong, do not guess silently. Take the most literal reading, record it in `docs/QUESTIONS.md` (the question, what you assumed, where in the code), and carry on.
 - Anything tagged *proposed*, and every number in a tuning table, is provisional. Keep all such values in `src/sim/tuning.ts` or `src/game/tuning.ts`. Never write them inline.
 
@@ -42,7 +42,7 @@ A browser puzzle-automation game for a two-week game jam: a cozy alchemical coff
 ## Scope discipline
 
 - Build in the order of "Spec 7: build order" and stop at the step you were asked to stop at.
-- This is a gray box: flat coloured tiles and plain text labels. No art, no sound, no animation polish, and no features that are not in the spec.
+- The art pass of step 7 is in: sprites are SVG in `src/ui/art/`, in the canvas's style. Still no sound, no animation polish, no submission page, and no features that are not in the spec.
 - Dependencies are TypeScript, Vite and Vitest. Ask before adding anything else.
 - Target a desktop browser with mouse and keyboard. No mobile work.
 

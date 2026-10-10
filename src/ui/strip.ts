@@ -1,8 +1,10 @@
 // The counter strip: one cell per counter column, under the floor. Just in
 // Time, within grace, a miss and no stool differ by shape as well as colour.
 
-import { itemGlyph, itemName } from '../sim/items';
+import { itemName } from '../sim/items';
 import type { StripCell } from '../game/strip';
+import { portraitImg, spriteImg } from './art/dom';
+import { itemKey } from './art/svg';
 import { PAD, TILE } from './geometry';
 import { el } from './panel';
 
@@ -10,7 +12,7 @@ const SHAPE = { justInTime: '●', grace: '◐', miss: '✕' } as const;
 const WORD = { justInTime: 'Just in Time', grace: 'within grace', miss: 'missed' } as const;
 
 export function shortName(name: string): string {
-  const word = name.replace(/^The /, '');
+  const word = name.replace(/^(The|Your) /, '');
   return word[0].toUpperCase() + word.slice(1, 4);
 }
 
@@ -19,7 +21,7 @@ export class StripView {
   private cells: HTMLDivElement[] = [];
 
   constructor() {
-    this.root.style.marginLeft = `${PAD + 1}px`;
+    this.root.style.marginLeft = `${PAD}px`;
     for (let c = 0; c < 12; c++) {
       const cell = el('div', { className: 'cell' });
       cell.style.width = `${TILE}px`;
@@ -46,10 +48,11 @@ export class StripView {
       const wants =
         s.def.order.tick === 'any' ? `any${s.slot !== null ? ' s' + s.slot : ''}` : `t${s.def.order.tick} s${s.slot}`;
       cell.append(
+        portraitImg(s.def.id, 30),
         el('div', { className: 'who' }, shortName(s.def.name)),
         el('div', {}, wants),
         el('div', { className: 'shape' }, SHAPE[s.result]),
-        el('div', {}, s.item ? itemGlyph(s.item) : '—'),
+        s.item ? spriteImg(itemKey(s.item), 26, 'cup') : el('div', { className: 'cup' }, '—'),
       );
       const on = s.tick !== null ? ` on tick ${s.tick}` : '';
       const slot = s.slot !== null ? ` Slot ${s.slot}.` : '';
