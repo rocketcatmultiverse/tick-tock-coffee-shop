@@ -42,41 +42,69 @@
   color-scheme: dark;
 }
 
+/* Author display rules must not undo the hidden attribute (tab panes, the cat card). */
+[hidden] {
+  display: none !important;
+}
+
+html,
 body {
+  height: 100%;
   margin: 0;
+  overflow: hidden;
   background: var(--night);
 }
 
+/* One screen, no page scroll: the floor fills the top left, the till and the
+   build palette run along the bottom, and the clock, the newest regular and
+   the tabs fill the right. Only a tab's own content may scroll. */
 #app {
-  display: flex;
-  gap: 24px;
-  padding: 16px 20px;
-  align-items: flex-start;
+  box-sizing: border-box;
+  height: 100vh;
+  padding: 12px 16px;
+  display: grid;
+  gap: 12px 16px;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'floor side'
+    'bottom side';
 }
 
-.floor-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.floor-area {
+  grid-area: floor;
+  position: relative;
+  min-height: 0;
+  min-width: 0;
 }
 
 canvas.floor {
+  position: absolute;
+  inset: 0;
   display: block;
   cursor: crosshair;
   user-select: none;
 }
 
-/* ---- Side panel ------------------------------------------------------------ */
-
-.panel {
-  width: 360px;
+.bottom {
+  grid-area: bottom;
   display: flex;
-  flex-direction: column;
   gap: 12px;
+  min-width: 0;
 }
 
-.panel h1 {
-  margin: 4px 0 0;
+.side {
+  grid-area: side;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+/* ---- Side panel ------------------------------------------------------------ */
+
+.side h1 {
+  margin: 0;
   font-family: var(--brush);
   font-weight: 400;
   font-size: 36px;
@@ -84,7 +112,7 @@ canvas.floor {
   color: var(--gold);
 }
 
-.panel h2 {
+.side h2 {
   margin: 4px 0 0;
   font-family: var(--brush);
   font-weight: 400;
@@ -122,6 +150,12 @@ canvas.floor {
 }
 
 .clock {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.clock-top {
   display: flex;
   align-items: center;
   gap: 16px;
@@ -176,7 +210,23 @@ canvas.floor {
 
 .controls > * {
   flex: 1;
-  height: 44px;
+  height: 40px;
+}
+
+.till-card {
+  flex: none;
+  width: 250px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  font-size: 15px;
+}
+
+.till-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
 }
 
 .stats {
@@ -228,28 +278,41 @@ button:disabled {
 }
 
 .build {
+  flex: 1;
+  min-width: 0;
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
 }
 
 .palette {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(10, 76px);
+  gap: 6px;
+  flex: none;
+}
+
+.build-side {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 button.piece {
-  height: 80px;
-  padding: 2px 4px;
+  width: 76px;
+  height: 76px;
+  padding: 2px;
   background: var(--floor);
   color: var(--night);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  font-size: 14px;
+  gap: 1px;
+  font-size: 13px;
   line-height: 1.05;
 }
 
@@ -270,21 +333,59 @@ button.piece:disabled {
   text-align: center;
 }
 
-.message {
+.message,
+.hover {
   min-height: 1.3em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.message {
   color: var(--gold);
 }
 
 .hover {
-  min-height: 1.3em;
   color: var(--muted);
   font-size: 15px;
 }
 
-.extra {
+/* ---- Tabs ------------------------------------------------------------------------ */
+
+.tabs {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
+}
+
+.tab-bar {
+  display: flex;
+  gap: 6px;
+}
+
+button.tab {
+  flex: 1;
+  padding: 3px 4px;
+  font-size: 15px;
+}
+
+button.tab.active {
+  background: var(--gold);
+  color: var(--night);
+}
+
+.tab-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 details > summary {
@@ -320,10 +421,19 @@ details > summary {
 
 .next {
   display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.next .portrait {
+  flex: none;
+}
+
+.next-text {
+  display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 4px;
+  gap: 2px;
+  min-width: 0;
 }
 
 .card-name {
@@ -417,61 +527,6 @@ details > summary {
 
 .cat-card input {
   width: 160px;
-}
-
-/* ---- The counter strip ----------------------------------------------------------- */
-
-.strip {
-  display: flex;
-}
-
-.strip .cell {
-  box-sizing: border-box;
-  min-height: 112px;
-  margin-right: 0;
-  padding: 3px 1px;
-  font-size: 12px;
-  line-height: 1.15;
-  text-align: center;
-  background: var(--panel);
-  border: 2px solid var(--panel-deep);
-  border-radius: 10px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1px;
-}
-
-.strip .cell .who {
-  font-family: var(--brush);
-  font-size: 14px;
-}
-
-.strip .cell .shape {
-  font-size: 16px;
-  line-height: 16px;
-}
-
-.strip .cell.none {
-  background: transparent;
-  border: 1.5px dashed #4a3f50;
-  color: #5c5060;
-}
-
-.strip .cell.justInTime {
-  border: 3px solid var(--leaf);
-  color: #b9dfa0;
-}
-
-.strip .cell.served {
-  border: 2.5px dashed var(--gold);
-  color: #f2d48e;
-}
-
-.strip .cell.miss {
-  border: 2.5px dotted var(--cherry);
-  color: #f0a08c;
-  background: #3a2430;
 }
 
 /* ---- The morning report ------------------------------------------------------------ */

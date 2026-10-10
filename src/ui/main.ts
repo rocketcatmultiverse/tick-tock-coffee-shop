@@ -6,37 +6,43 @@ import { ALL_PIECES } from '../game/pieces';
 import { applyOffline } from '../game/offline';
 import { Shop } from '../game/shop';
 import { type StripCell, counterStrip } from '../game/strip';
+import { HAPPY_LOOPS } from '../game/tuning';
 import { REGULARS } from '../levels/regulars';
 import { catSpot } from './cat';
 import { CatCard } from './catCard';
 import { RegularsPanel } from './regularsPanel';
-import { StripView } from './strip';
 import { SpriteBank } from './art/raster';
 import { Editor } from './editor';
-import { canvasSize, type Spot } from './geometry';
+import { Geometry, type Spot } from './geometry';
 import { bindInput } from './input';
-import { Panel, el } from './panel';
+import { Panel, Tabs, el, keysPane } from './panel';
 import { showMorningReport } from './morningReport';
-import { draw, type View } from './render';
+import { type StoolView, type View, draw } from './render';
 import { clearSave, readSave, writeSave } from './storage';
 
 /** How often the shop is saved while open, in milliseconds. */
 const AUTOSAVE_MS = 2000;
+/** Happenings kept in the log. */
+const NOTES_KEPT = 30;
+
+const WORD = { justInTime: 'Just in Time', served: 'served', miss: 'missed' } as const;
 
 class App {
   readonly shop: Shop;
   readonly editor: Editor;
+  readonly geo = new Geometry();
   hover: Spot | null = null;
   running = true;
   speed = 1;
   private timer: number | undefined;
   private readouts = new Map<number, { tick: number; roast: Roast | null }>();
+  private floorArea = el('div', { className: 'floor-area' });
   private canvas = el('canvas', { className: 'floor' });
   /** Sprites are rasterised once and redrawn when they arrive. */
   private sprites = new SpriteBank(() => this.render());
   private ctx: CanvasRenderingContext2D;
   private panel: Panel;
-  private stripView = new StripView();
+  private tabs: Tabs;
   private regularsPanel = new RegularsPanel();
   private notes: string[] = [];
   private catCard = new CatCard({
@@ -59,39 +65,59 @@ class App {
     const report = loaded ? applyOffline(this.shop, loaded.lastSeen, Date.now()) : null;
     this.editor = new Editor(this.shop);
     this.ctx = this.canvas.getContext('2d')!;
-    this.panel = new Panel(
-      {
-        togglePause: () => this.togglePause(),
-        stepOnce: () => this.stepOnce(),
-        setSpeed: (n) => {
-          this.speed = n;
-          this.schedule();
-          this.render();
-        },
-        pick: (p) => {
-          this.editor.pick(p);
-          this.render();
-        },
-        buyRow: () => {
-          this.editor.message = this.shop.buyRow() ?? 'Bought a floor row';
-          this.render();
-        },
-        undo: () => {
-          this.editor.undo();
-          this.render();
-        },
-        redo: () => {
-          this.editor.redo();
-          this.render();
-        },
+    this.panel = new Panel({
+      togglePause: () => this.togglePause(),
+      stepOnce: () => this.stepOnce(),
+      setSpeed: (n) => {
+        this.speed = n;
+        this.schedule();
+        this.render();
       },
-      debug,
-    );
+      pick: (p) => {
+        this.editor.pick(p);
+        this.render();
+      },
+      buyRow: () => {
+        this.editor.message = this.shop.buyRow() ?? 'Bought a floor row';
+        this.render();
+      },
+      undo: () => {
+        this.editor.undo();
+        this.render();
+      },
+      redo: () => {
+        this.editor.redo();
+        this.render();
+      },
+    });
     const fresh = el('button', { textContent: 'Start a new shop' });
     fresh.onclick = () => this.startOver();
-    this.panel.extra.append(this.catCard.root, this.regularsPanel.root, el('div', { className: 'row' }, fresh));
-    root.append(el('main', { className: 'floor-wrap' }, this.canvas, this.stripView.root), this.panel.root);
+    this.tabs = new Tabs([
+      { id: 'regulars', label: 'Regulars', content: [this.regularsPanel.list] },
+      { id: 'log', label: 'Happenings', content: [this.regularsPanel.log] },
+      { id: 'keys', label: 'Keys', content: keysPane() },
+      {
+        id: 'shop',
+        label: 'Shop',
+        content: [this.catCard.root, el('p', { className: 'muted' }, 'Click your cat on the floor to name it or pet it.'), fresh],
+      },
+    ]);
+    this.floorArea.append(this.canvas);
+    root.append(
+      this.floorArea,
+      el('div', { className: 'bottom' }, this.panel.tillCard, this.panel.build),
+      el(
+        'aside',
+        { className: 'side' },
+        el('h1', {}, 'Tick Tock Coffee Shop', debug ? el('span', { className: 'badge' }, 'debug') : ''),
+        this.panel.clock,
+        this.regularsPanel.next,
+        this.tabs.root,
+      ),
+    );
     bindInput(this.canvas, this);
+    // The floor fills whatever room the panels leave it, and is redrawn when that changes.
+    new ResizeObserver(() => this.render()).observe(this.floorArea);
     this.save();
     window.setInterval(() => this.save(), AUTOSAVE_MS);
     window.addEventListener('pagehide', () => this.save());
@@ -137,11 +163,20 @@ class App {
 
   clickFloor(spot: Spot): void {
     const cat = this.catAt();
-    if (spot.row === cat.row && spot.col === cat.col) this.catCard.open();
+    if (spot.row === cat.row && spot.col === cat.col) {
+      this.tabs.select('shop');
+      this.catCard.open();
+    }
   }
 
   rows(): number {
     return this.shop.layout.rows;
+  }
+
+  /** Move the camera over the back room. */
+  pan(dx: number, dy: number): void {
+    this.geo.pan(dx, dy);
+    this.render();
   }
 
   togglePause(): void {
@@ -165,7 +200,7 @@ class App {
     for (const e of report.events) {
       if (e.type === 'brew') this.readouts.set(e.at, { tick: e.tick, roast: 'roast' in e.item ? e.item.roast : null });
     }
-    this.notes = [...report.notes.map((n) => `${report.T % 12}: ${n}`).reverse(), ...this.notes].slice(0, 8);
+    this.notes = [...report.notes.map((n) => `${report.T % 12}: ${n}`).reverse(), ...this.notes].slice(0, NOTES_KEPT);
     this.render();
   }
 
@@ -173,6 +208,7 @@ class App {
     const h = this.hover;
     if (!h) return '';
     const { layout, sim } = this.shop;
+    if (h.row === -2) return this.stoolInfo(h.col);
     if (h.row === -1) {
       const item = sim.belts[counterIndex(layout, h.col)];
       const ticks = this.strip()?.[h.col].cupTicks ?? [];
@@ -194,28 +230,40 @@ class App {
     return parts.join(' · ');
   }
 
-  /** The slot a stool wants; an any-tick stool shows "any", then the slot it last took a cup from. */
-  private stoolSlot(i: number): string {
-    const seat = this.shop.seats()[i];
-    if (seat.tick !== 'any') return `slot ${slotOf(seat.tick, seat.col)}`;
-    const last = this.shop.sim.lastServedAt[i];
-    return last === null ? 'any' : `any·${slotOf(last, seat.col)}`;
+  /** What the counter strip says about the stool in column `col`. */
+  private stoolInfo(col: number): string {
+    const cell = this.strip()?.[col];
+    const ticks = cell?.cupTicks.length ? `cup in front of it on ticks ${cell.cupTicks.join(', ')}` : 'no cup here in steady state';
+    const s = cell?.stool;
+    if (!s) return `Column ${col}: no stool · ${ticks}`;
+    const on = s.tick !== null ? ` on tick ${s.tick}` : '';
+    const slot = s.slot !== null ? ` · slot ${s.slot}` : '';
+    const happy = this.shop.happiness(s.seat);
+    const mood = happy >= HAPPY_LOOPS ? 'happy' : `${happy} of ${HAPPY_LOOPS} loops in a row`;
+    return `${s.def.name}: ${WORD[s.result]}${on}${s.item ? `, ${itemName(s.item)}` : ''}${slot} · ${mood} · ${ticks}`;
   }
 
-  /** How many of the regulars who have walked in are seated. */
+  /** "t9 · s9" for a timed stool; "any · s7" for an any-tick one, with the slot it last took a cup from. */
+  private stoolLabel(i: number): string {
+    const seat = this.shop.seats()[i];
+    if (seat.tick !== 'any') return `t${seat.tick} · s${slotOf(seat.tick, seat.col)}`;
+    const last = this.shop.sim.lastServedAt[i];
+    return last === null ? 'any' : `any · s${slotOf(last, seat.col)}`;
+  }
+
+  /** How the regulars are doing: how many are happy, and how many are in. */
   private seatedInfo(): string {
-    const regs = this.shop.regulars;
-    const seated = regs.filter((r) => r.status === 'seated').length;
-    if (seated === this.shop.defs.length) return 'all seated';
-    return `${seated} seated${regs.length > seated ? ` · ${regs.length - seated} not` : ''}`;
+    const n = this.shop.regulars.length;
+    const happy = this.shop.regulars.filter((_, i) => this.shop.isHappy(i)).length;
+    return `${happy} of ${n} regular${n === 1 ? '' : 's'} happy${n < this.shop.defs.length ? '' : ' · everyone is in'}`;
   }
 
   /** The milk order: how many pails, and from which tick. */
   private milkInfo(): string {
     const n = this.shop.milkOrder();
     if (n === 0) return 'Milk order: none yet';
-    const ticks = n === 1 ? `tick ${MILK_TICK}` : `ticks ${MILK_TICK} to ${MILK_TICK + n - 1}`;
-    return `Milk order: ${n} pail${n === 1 ? '' : 's'} a loop through the side door, on ${ticks}`;
+    const ticks = n === 1 ? `tick ${MILK_TICK}` : `ticks ${MILK_TICK}–${MILK_TICK + n - 1}`;
+    return `Milk: ${n} pail${n === 1 ? '' : 's'} a loop, ${ticks}`;
   }
 
   private strip(): StripCell[] | null {
@@ -227,35 +275,49 @@ class App {
     return strip;
   }
 
-  render(): void {
-    const size = canvasSize(this.shop.layout.rows);
-    // Draw at the screen's own pixel density so the hand-drawn lines stay crisp.
-    const dpr = window.devicePixelRatio || 1;
-    if (this.canvas.width !== Math.round(size.w * dpr) || this.canvas.height !== Math.round(size.h * dpr)) {
-      this.canvas.width = Math.round(size.w * dpr);
-      this.canvas.height = Math.round(size.h * dpr);
-      this.canvas.style.width = `${size.w}px`;
-      this.canvas.style.height = `${size.h}px`;
-    }
-    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const view: View = {
-      shop: this.shop,
-      editor: this.editor,
-      hover: this.hover,
-      readouts: this.readouts,
-      stools: this.shop
-        .seats()
-        .map((seat, i) => ({ seat, i }))
-        .filter(({ seat }) => seat.bowl === undefined)
-        .map(({ seat, i }) => ({
+  private stools(): StoolView[] {
+    const strip = this.strip();
+    return this.shop
+      .seats()
+      .map((seat, i) => ({ seat, i }))
+      .filter(({ seat }) => seat.bowl === undefined)
+      .map(({ seat, i }) => {
+        const cell = strip?.[seat.col].stool;
+        return {
           col: seat.col,
           id: this.shop.defs[i].id,
-          slot: this.stoolSlot(i),
+          label: this.stoolLabel(i),
           // The floor shows the tick just run, so presence is read for that tick.
           present: this.shop.T > 0 && isPresent(seat, this.shop.T - 1),
           servedNow: this.shop.lastEvents.some((e) => e.type === 'serve' && e.seat === i),
           status: this.shop.regulars[i].status,
-        })),
+          happy: this.shop.happiness(i),
+          result: cell?.result ?? null,
+          cup: cell?.item ?? null,
+        };
+      });
+  }
+
+  render(): void {
+    // The canvas fills the floor area, at the screen's own pixel density so the lines stay crisp.
+    const w = this.floorArea.clientWidth;
+    const h = this.floorArea.clientHeight;
+    const dpr = window.devicePixelRatio || 1;
+    if (this.canvas.width !== Math.round(w * dpr) || this.canvas.height !== Math.round(h * dpr)) {
+      this.canvas.width = Math.round(w * dpr);
+      this.canvas.height = Math.round(h * dpr);
+      this.canvas.style.width = `${w}px`;
+      this.canvas.style.height = `${h}px`;
+    }
+    this.geo.fit(w, h, this.shop.layout.rows);
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const view: View = {
+      shop: this.shop,
+      editor: this.editor,
+      geo: this.geo,
+      hover: this.hover,
+      readouts: this.readouts,
+      stools: this.stools(),
       cat: { spot: this.catAt(), heart: this.catCard.heart, mad: this.catMad() },
       sprites: this.sprites,
       dpr,
@@ -270,7 +332,6 @@ class App {
       speed: this.speed,
       till: this.shop.till,
       gears: this.shop.gears,
-      debug: this.shop.debug,
       spillsThisLoop: this.shop.spillsThisLoop,
       spillsLastLoop: this.shop.spillsLastLoop,
       milk: this.milkInfo(),
@@ -289,7 +350,6 @@ class App {
       canUndo: this.editor.canUndo,
       canRedo: this.editor.canRedo,
     });
-    this.stripView.update(this.strip());
     this.regularsPanel.update(
       this.shop.defs,
       this.shop.regulars,

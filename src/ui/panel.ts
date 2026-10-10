@@ -1,6 +1,6 @@
-// The side panel: plain DOM, rebuilt in place on every render. Laid out as on
-// the visuals canvas: title, clock, controls, the till and the regulars, then
-// the build palette.
+// The panels around the floor: plain DOM, updated in place on every render.
+// The clock and its controls sit top right, the till bottom left, the build
+// palette bottom middle; less frequent things live in tabs on the right.
 
 import { roastForTick } from '../sim/items';
 import { LOOP } from '../sim/tuning';
@@ -26,11 +26,10 @@ export interface PanelModel {
   speed: number;
   till: number;
   gears: number;
-  debug: boolean;
   spillsThisLoop: number;
   spillsLastLoop: number;
   milk: string;
-  /** "3 seated", "all seated" and the like. */
+  /** "3 seated", "all happy" and the like. */
   seated: string;
   palette: { piece: PieceKind; locked: boolean; note: string }[];
   inHand: PieceKind | 'group' | null;
@@ -72,8 +71,14 @@ const ROAST_LEGEND: [string, number, number][] = [
 ];
 
 export class Panel {
-  readonly root: HTMLElement;
-  private dial = el('img', { className: 'dial', width: 120, height: 120, alt: 'The shop clock' });
+  /** Top right: the clock and the time controls. */
+  readonly clock: HTMLElement;
+  /** Bottom left: the till and how the shop is doing. */
+  readonly tillCard: HTMLElement;
+  /** Bottom middle: the build palette. */
+  readonly build: HTMLElement;
+
+  private dial = el('img', { className: 'dial', width: 104, height: 104, alt: 'The shop clock' });
   private dialTick: number | null | undefined = undefined;
   private tickBig = el('div', { className: 'big' });
   private tickSmall = el('div', { className: 'muted' });
@@ -82,20 +87,18 @@ export class Panel {
   private speed = el('select');
   private till = el('div', { className: 'big' });
   private gears = el('div', { className: 'muted' });
-  private seated = el('div', { className: 'big' });
+  private seated = el('div');
   private spills = el('div', { className: 'muted' });
   private milk = el('div', { className: 'muted' });
   private paletteBtns = new Map<PieceKind, { btn: HTMLButtonElement; label: HTMLSpanElement }>();
-  private rowBtn = el('button', { textContent: `Buy a floor row · ${FLOOR_ROW_PRICE}` });
+  private rowBtn = el('button', { textContent: `Buy a row · ${FLOOR_ROW_PRICE}` });
   private undoBtn = el('button', { textContent: 'Undo' });
   private redoBtn = el('button', { textContent: 'Redo' });
   private message = el('div', { className: 'message' });
   private hover = el('div', { className: 'hover' });
   private bufferInfo = el('div', { className: 'muted' });
-  /** Slot for the counter's own sections (regulars), filled by the app. */
-  readonly extra = el('div', { className: 'extra' });
 
-  constructor(actions: PanelActions, debug: boolean) {
+  constructor(actions: PanelActions) {
     this.playBtn.onclick = () => actions.togglePause();
     this.stepBtn.onclick = () => actions.stepOnce();
     for (const n of [1, 2, 4]) this.speed.append(el('option', { value: String(n), textContent: `${n}×` }));
@@ -103,6 +106,33 @@ export class Panel {
     this.rowBtn.onclick = () => actions.buyRow();
     this.undoBtn.onclick = () => actions.undo();
     this.redoBtn.onclick = () => actions.redo();
+
+    const legend = el(
+      'div',
+      { className: 'legend' },
+      ...ROAST_LEGEND.map(([name, a, b]) => el('div', {}, el('span', { className: `swatch ${name.toLowerCase()}` }), `${name} ${a}–${b}`)),
+    );
+    this.clock = el(
+      'div',
+      { className: 'card clock' },
+      el(
+        'div',
+        { className: 'clock-top' },
+        this.dial,
+        el('div', { className: 'clock-text' }, el('div', { className: 'muted' }, 'Tick'), this.tickBig, legend, this.tickSmall),
+      ),
+      el('div', { className: 'controls' }, this.playBtn, this.stepBtn, this.speed),
+    );
+
+    this.tillCard = el(
+      'div',
+      { className: 'card till-card' },
+      el('div', { className: 'till-line' }, this.till, this.gears),
+      this.seated,
+      this.spills,
+      this.milk,
+    );
+
     const palette = el('div', { className: 'palette' });
     for (const piece of ALL_PIECES) {
       const label = el('span', { className: 'piece-label' });
@@ -111,57 +141,17 @@ export class Panel {
       this.paletteBtns.set(piece, { btn, label });
       palette.append(btn);
     }
-    const legend = el(
+    this.build = el(
       'div',
-      { className: 'legend' },
-      ...ROAST_LEGEND.map(([name, a, b]) => {
-        const swatch = el('span', { className: `swatch ${name.toLowerCase()}` });
-        return el('div', {}, swatch, `${name} ${a}–${b}`);
-      }),
-    );
-    this.root = el(
-      'aside',
-      { className: 'panel' },
-      el('h1', {}, 'Tick Tock Coffee Shop', debug ? el('span', { className: 'badge' }, 'debug') : ''),
-      el('div', { className: 'card clock' }, this.dial, el('div', { className: 'clock-text' }, el('div', { className: 'muted' }, 'Tick'), this.tickBig, legend, this.tickSmall)),
-      el('div', { className: 'controls' }, this.playBtn, this.stepBtn, this.speed),
+      { className: 'card build' },
+      palette,
       el(
         'div',
-        { className: 'stats' },
-        el('div', { className: 'card' }, el('div', { className: 'muted' }, 'Till'), this.till, this.gears),
-        el('div', { className: 'card' }, el('div', { className: 'muted' }, 'Regulars'), this.seated, this.spills),
-      ),
-      this.milk,
-      el('div', { className: 'card build' }, el('div', { className: 'muted' }, 'Build'), palette, el('div', { className: 'row' }, this.rowBtn, this.undoBtn, this.redoBtn), this.bufferInfo),
-      this.message,
-      this.hover,
-      this.extra,
-      el(
-        'details',
-        { className: 'card keys-card' },
-        el('summary', {}, 'Keys'),
-        el(
-          'ul',
-          { className: 'keys' },
-          ...[
-            'Click a palette piece, then click the floor. Drag to lay belts.',
-            'R turn · F flip · Esc or right-click put down',
-            'Z delete · X cut · C copy (the tile under the cursor)',
-            'Shift+drag box select, then Z, Ctrl+X, Ctrl+C',
-            'Ctrl+V pick up the buffer · Ctrl+wheel older entries',
-            'Ctrl+Z undo · Ctrl+Y redo',
-            'Space pause · . step one tick',
-          ].map((t) => el('li', {}, t)),
-        ),
-        el(
-          'p',
-          { className: 'credits' },
-          'Fonts: Caveat Brush and Patrick Hand, under the SIL Open Font License (',
-          el('a', { href: 'licenses/OFL-CaveatBrush.txt', target: '_blank', textContent: 'Caveat Brush' }),
-          ', ',
-          el('a', { href: 'licenses/OFL-PatrickHand.txt', target: '_blank', textContent: 'Patrick Hand' }),
-          ').',
-        ),
+        { className: 'build-side' },
+        el('div', { className: 'row' }, this.rowBtn, this.undoBtn, this.redoBtn),
+        this.message,
+        this.hover,
+        this.bufferInfo,
       ),
     );
   }
@@ -180,9 +170,9 @@ export class Panel {
     this.stepBtn.disabled = m.running;
     this.speed.value = String(m.speed);
     this.till.textContent = `${m.till.toLocaleString()} coins`;
-    this.gears.textContent = `${m.gears.toLocaleString()} gear${m.gears === 1 ? '' : 's'} by the till`;
+    this.gears.textContent = `· ${m.gears.toLocaleString()} gear${m.gears === 1 ? '' : 's'}`;
     this.seated.textContent = m.seated;
-    this.spills.textContent = `spills this loop ${m.spillsThisLoop} · last ${m.spillsLastLoop}`;
+    this.spills.textContent = `Spills: ${m.spillsThisLoop} this loop, ${m.spillsLastLoop} last loop`;
     this.milk.textContent = m.milk;
     for (const p of m.palette) {
       const { btn, label } = this.paletteBtns.get(p.piece)!;
@@ -197,4 +187,61 @@ export class Panel {
     this.message.textContent = m.message;
     this.hover.textContent = m.hoverInfo;
   }
+}
+
+/** A card with a row of tabs; one pane shows at a time and scrolls on its own. */
+export class Tabs {
+  readonly root = el('div', { className: 'card tabs' });
+  private buttons = new Map<string, HTMLButtonElement>();
+  private panes = new Map<string, HTMLElement>();
+
+  constructor(tabs: { id: string; label: string; content: Node[] }[]) {
+    const bar = el('div', { className: 'tab-bar' });
+    const body = el('div', { className: 'tab-body' });
+    for (const t of tabs) {
+      const b = el('button', { className: 'tab', textContent: t.label });
+      b.onclick = () => this.select(t.id);
+      this.buttons.set(t.id, b);
+      bar.append(b);
+      const pane = el('div', { className: 'pane' }, ...t.content);
+      this.panes.set(t.id, pane);
+      body.append(pane);
+    }
+    this.root.append(bar, body);
+    this.select(tabs[0].id);
+  }
+
+  select(id: string): void {
+    for (const [k, b] of this.buttons) b.classList.toggle('active', k === id);
+    for (const [k, p] of this.panes) p.hidden = k !== id;
+  }
+}
+
+/** The keys, and credits for the fonts. */
+export function keysPane(): HTMLElement[] {
+  return [
+    el(
+      'ul',
+      { className: 'keys' },
+      ...[
+        'Click a palette piece, then click the floor. Drag to lay belts.',
+        'R turn · F flip · Esc or right-click put down',
+        'Z delete · X cut · C copy (the tile under the cursor)',
+        'Shift+drag box select, then Z, Ctrl+X, Ctrl+C',
+        'Ctrl+V pick up the buffer · Ctrl+wheel older entries',
+        'Ctrl+Z undo · Ctrl+Y redo',
+        'Space pause · . step one tick',
+        'Right-drag, middle-drag or the mouse wheel: look around a tall floor',
+      ].map((t) => el('li', {}, t)),
+    ),
+    el(
+      'p',
+      { className: 'credits' },
+      'Fonts: Caveat Brush and Patrick Hand, under the SIL Open Font License (',
+      el('a', { href: 'licenses/OFL-CaveatBrush.txt', target: '_blank', textContent: 'Caveat Brush' }),
+      ', ',
+      el('a', { href: 'licenses/OFL-PatrickHand.txt', target: '_blank', textContent: 'Patrick Hand' }),
+      ').',
+    ),
+  ];
 }

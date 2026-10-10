@@ -1,4 +1,5 @@
-// The card for the next regular, the list of regulars and recent happenings.
+// The card for the newest regular, the list of regulars and recent happenings.
+// The card sits on the right under the clock; the list and the happenings are tabs.
 
 import type { RegularDef } from '../sim/types';
 import { describeOrder, type RegularState } from '../game/regulars';
@@ -17,21 +18,10 @@ export function happyPips(loops: number): HTMLSpanElement {
 }
 
 export class RegularsPanel {
-  readonly root = el('div', { className: 'regulars' });
-  private card = el('div', { className: 'card next' });
-  private list = el('ul', { className: 'reg-list' });
-  private log = el('ul', { className: 'log' });
+  readonly next = el('div', { className: 'card next' });
+  readonly list = el('ul', { className: 'reg-list' });
+  readonly log = el('ul', { className: 'log' });
   private shown = '';
-
-  constructor() {
-    this.root.append(
-      el('h2', {}, 'Next regular'),
-      this.card,
-      el('details', { className: 'card', open: true }, el('summary', {}, 'Regulars'), this.list),
-      el('h2', {}, 'Happenings'),
-      el('div', { className: 'card' }, this.log),
-    );
-  }
 
   update(
     defs: readonly RegularDef[],
@@ -44,22 +34,34 @@ export class RegularsPanel {
     const key = JSON.stringify([newcomer?.id ?? null, regulars, happiness, notes]);
     if (key === this.shown) return;
     this.shown = key;
-    this.card.replaceChildren();
+    this.next.replaceChildren();
     if (newcomer) {
-      this.card.append(
-        portraitImg(newcomer.id, 110, 'portrait big'),
-        el('div', { className: 'card-name' }, newcomer.name),
-        el('div', { className: 'order' }, describeOrder(newcomer)),
-        el('div', { className: 'muted' }, seatName(newcomer)),
-        el('div', { className: 'intro' }, `"${newcomer.intro}"`),
-        happyPips(happiness[regulars.length - 1] ?? 0),
-        el('div', { className: 'muted' }, `Happy after ${HAPPY_LOOPS} loops in a row with their cup. The next regular walks in once everyone is happy.`),
+      this.next.append(
+        portraitImg(newcomer.id, 76, 'portrait big'),
+        el(
+          'div',
+          { className: 'next-text' },
+          el('div', { className: 'muted' }, 'Newest regular'),
+          el('div', { className: 'card-name' }, newcomer.name),
+          el('div', { className: 'order' }, `${describeOrder(newcomer)} · ${seatName(newcomer)}`),
+          el('div', { className: 'intro' }, `"${newcomer.intro}"`),
+          el(
+            'div',
+            { className: 'muted' },
+            happyPips(happiness[regulars.length - 1] ?? 0),
+            ` Happy after ${HAPPY_LOOPS} loops in a row with their cup. The next regular walks in once everyone is happy.`,
+          ),
+        ),
       );
     } else {
       const allIn = regulars.length === defs.length;
-      this.card.append(
-        el('div', {}, allIn ? 'Everyone is in, and the newest regular is happy.' : 'The newest regular is happy.'),
-        el('div', { className: 'muted' }, allIn ? 'Keep them all served.' : 'The next one walks in once everyone is happy.'),
+      this.next.append(
+        el(
+          'div',
+          { className: 'next-text' },
+          el('div', { className: 'card-name' }, allIn ? 'Everyone is in' : 'The newest regular is happy'),
+          el('div', { className: 'muted' }, allIn ? 'Keep them all served.' : 'The next one walks in once everyone is happy.'),
+        ),
       );
     }
     this.list.replaceChildren(

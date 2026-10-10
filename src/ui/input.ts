@@ -1,35 +1,55 @@
 // Mouse and keyboard, turned into editor calls (docs/SPEC.md, Spec 4,
 // "Editing keys"). Shift+drag box-selects so a plain drag still lays belts.
+// The camera: right-drag or middle-drag moves it, and so does the mouse wheel;
+// a right-click that does not move still puts down what is in hand.
 
 import type { Editor } from './editor';
-import { type Spot, hitTest } from './geometry';
+import type { Geometry, Spot } from './geometry';
 
 export interface InputHost {
   editor: Editor;
-  rows(): number;
+  geo: Geometry;
   hover: Spot | null;
   render(): void;
   togglePause(): void;
   stepOnce(): void;
+  /** Move the camera by a drag of (dx, dy) pixels. */
+  pan(dx: number, dy: number): void;
   /** A click with nothing in hand, for things on the floor such as the cat. */
   clickFloor(spot: Spot): void;
 }
 
+/** Pixels a right-button press may move before it counts as a drag, not a click. */
+const DRAG_SLOP = 4;
+
 export function bindInput(canvas: HTMLCanvasElement, host: InputHost): void {
   const ed = host.editor;
   let down = false;
+  /** A camera drag in progress: where the pointer was, and whether it has moved enough to count. */
+  let panning: { x: number; y: number; button: number; moved: boolean } | null = null;
 
   const spotAt = (e: MouseEvent): Spot | null => {
     const rect = canvas.getBoundingClientRect();
-    return hitTest(host.rows(), e.clientX - rect.left, e.clientY - rect.top);
+    return host.geo.hitTest(e.clientX - rect.left, e.clientY - rect.top);
   };
 
   canvas.addEventListener('mousemove', (e) => {
+    if (panning) {
+      const dx = e.clientX - panning.x;
+      const dy = e.clientY - panning.y;
+      if (panning.moved || Math.abs(dx) + Math.abs(dy) > DRAG_SLOP) {
+        panning.moved = true;
+        panning.x = e.clientX;
+        panning.y = e.clientY;
+        host.pan(dx, dy);
+      }
+      return;
+    }
     const spot = spotAt(e);
     host.hover = spot;
-    if (down && spot) {
+    if (down && spot && spot.row >= 0) {
       if (ed.selecting) ed.selectTo(spot.row, spot.col);
-      else if (spot.row >= 0) ed.dragTo(spot.row, spot.col);
+      else ed.dragTo(spot.row, spot.col);
     }
     host.render();
   });
@@ -40,6 +60,11 @@ export function bindInput(canvas: HTMLCanvasElement, host: InputHost): void {
   });
 
   canvas.addEventListener('mousedown', (e) => {
+    if (e.button === 1 || e.button === 2) {
+      e.preventDefault(); // no autoscroll, no menu
+      panning = { x: e.clientX, y: e.clientY, button: e.button, moved: false };
+      return;
+    }
     if (e.button !== 0) return;
     const spot = spotAt(e);
     if (!spot) return;
@@ -49,7 +74,7 @@ export function bindInput(canvas: HTMLCanvasElement, host: InputHost): void {
       ed.beginSelect(spot.row, spot.col);
     } else if (ed.hand) {
       if (spot.row >= 0) ed.press(spot.row, spot.col);
-      else ed.message = 'The counter belt is fixed';
+      else ed.message = 'The counter is fixed';
     } else {
       ed.selection = null;
       host.clickFloor(spot);
@@ -57,7 +82,14 @@ export function bindInput(canvas: HTMLCanvasElement, host: InputHost): void {
     host.render();
   });
 
-  window.addEventListener('mouseup', () => {
+  window.addEventListener('mouseup', (e) => {
+    if (panning && e.button === panning.button) {
+      // A right-click that did not move puts down whatever is in hand.
+      if (panning.button === 2 && !panning.moved) ed.putDown();
+      panning = null;
+      host.render();
+      return;
+    }
     if (!down) return;
     down = false;
     ed.release();
@@ -65,19 +97,20 @@ export function bindInput(canvas: HTMLCanvasElement, host: InputHost): void {
     host.render();
   });
 
-  canvas.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-    ed.putDown();
-    host.render();
-  });
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
   canvas.addEventListener(
     'wheel',
     (e) => {
-      if (!e.ctrlKey) return;
-      e.preventDefault(); // no browser zoom
-      ed.wheel(e.deltaY > 0 ? 1 : -1);
-      host.render();
+      e.preventDefault(); // no page scroll, no browser zoom
+      if (e.ctrlKey) {
+        ed.wheel(e.deltaY > 0 ? 1 : -1);
+        host.render();
+        return;
+      }
+      // Rolling the wheel down shows lower rows, toward the counter.
+      const lines = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? host.geo.roomH : 1;
+      host.pan(-e.deltaX * lines, -e.deltaY * lines);
     },
     { passive: false },
   );

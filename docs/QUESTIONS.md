@@ -143,7 +143,7 @@ Time, ◐ within grace (also used for any-tick regulars, who always pay the
 plain price), ✕ a miss, and a faint dot for a column with no stool. For an
 any-tick regular the cell shows the tick their cup arrives. Steady state is
 computed with every walked-in regular seated and milk always paid, and only
-when the layout or the seats change. `src/game/strip.ts`, `src/ui/strip.ts`. *Superseded by ADDENDUM-01: the strip also shows each stool's slot (Q51).*
+when the layout or the seats change. `src/game/strip.ts`, `src/ui/strip.ts`. *Superseded by ADDENDUM-01: the strip also shows each stool's slot (Q51).* *Superseded: the strip is drawn in the stool band on the floor canvas, with Just in Time, served (any tick) and missed (Q61, Q63).*
 
 **Q24. Small extras.** "One tick lasts one second at normal speed" implies
 other speeds, so there is a 1×/2×/4× selector. Space toggles pause and
@@ -430,4 +430,30 @@ mean what they did. The panel's "next regular" is now the newest regular who
 is not yet happy, with a meter of pips. *Assumed:* happiness is not saved
 (the save format is unchanged), so after a load everyone earns it again
 before the next newcomer. `Shop.tick` in `src/game/shop.ts`.
+
+**Q63. One screen at 1080p.** *Your request:* no page scrolling at 1080p, a
+bigger floor, the till bottom left, the build palette bottom middle, panels on
+the right with tabs for less frequent things, and the clock top right.
+*Done as:*
+- the page is a full-window grid that never scrolls. The floor canvas fills
+  the top left; the till card and the build palette (one row of ten pieces,
+  with buy a row, undo, redo, messages and hover text) run along the bottom;
+  the right column holds the clock with its controls, the newest regular,
+  then tabs: Regulars, Happenings, Keys and Shop (the cat's card and "Start a
+  new shop"). Only a tab's own content scrolls;
+- the floor is sized to show all its rows, so a new six-row shop is drawn
+  large and zooms out as rows are bought. From the thirteenth row the size
+  stops shrinking and a camera moves over the back room: right-drag or
+  middle-drag, or the mouse wheel. A right-click that does not move still puts
+  down what is in hand, and Ctrl+wheel still steps the paste buffer. Hints
+  at the edges count the rows out of view, and a slim bar beside the floor
+  shows where the camera is;
+- the counter, its wooden edge and the stools stay pinned at the bottom
+  while the back room moves. The counter strip moved into the stool band:
+  each stool shows its regular's portrait (dimmed when they are not at the
+  counter), the tick and slot they want, the strip's verdict and cup, and
+  their happiness pips. Hovering a stool gives the strip's full reading.
+At 1920 by 960 (a 1080p screen less the browser's bars) the twelve-row
+all-twelve layout fits with no camera movement. `src/ui/geometry.ts`,
+`src/ui/input.ts`, `src/ui/main.ts`.
 
