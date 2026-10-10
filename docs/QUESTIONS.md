@@ -193,7 +193,7 @@ column 1 and joins the counter there. Each cup arrives on a different tick of
 the loop, so cups never collide on the shared bus, and each rides to its own
 stool. It uses 3 wells, 3 back doors, 2 roasters, 2 mixers and 1 chute, and
 buys 18 floor rows (24 rows deep). Five of the nine timed regulars are served
-Just in Time and the rest within grace. *Superseded by ADDENDUM-01: that layout broke under the feeder rule; see Q48.*
+Just in Time and the rest within grace. *Superseded by ADDENDUM-01: that layout broke under the feeder rule (Q48); the new one is in Q54.*
 
 **Q31. Fixture checks.** Each reference layout now states how many floor rows
 it buys and which regulars it serves Just in Time. The test also builds it
@@ -295,9 +295,8 @@ a finding. Every step 1 to 5 reference layout breaks under the addendum:
   all-four, postwoman, baker, apothecary, witch, alchemist) put its cups on the
   counter away from column 0, never through a feeder.
 The addendum replaces them. Its layout for places 1 to 4 is the fixture for
-all four (it replaces the four single layouts), and the milk corner is the
-fixture for the order. Places 5 to 12 and the all-twelve layout are owed by
-step 5.
+all four, and the milk corner is the fixture for the order. Step 5 rebuilt
+the rest (Q53 to Q55).
 
 **Q49. Intro lines.** The clockmaker's and the mayor's intros named their old
 ticks. *Changed:* "ninth" and "eleventh". Text only.
@@ -310,4 +309,51 @@ over them on the tick just run, which is the tick the clock shows (Q22). Under
 each stool: "slot N", or "any·N" for an any-tick regular, with N the slot of
 the last cup they actually took. The strip reads "t9 s9", or "any s7" with
 the any-tick slot from steady state.
+
+## The rest of the ladder under addendum 1 (step 5 again)
+
+**Q52. The milk corner only works once all three milk drinkers are in.**
+*Finding.* The addendum's splitter has two outputs, down then left, so the
+first pail of every loop goes down to the mixer. At place 10 the order is one
+pail (the cat alone), so that pail meets nothing at the mixer and spills, and
+the cat is never served. In play the innkeeper would then never walk in. With
+two or three pails it works as drawn, and it passes as a fixture for the full
+order (Q48). The all-twelve layout (Q54) avoids the trap: its splitter has
+three outputs and the first, north, is the cat's. *Not changed:* the rule and
+the corner stand as written. If the corner is meant to be built at place 10,
+the splitter's first output has to be the cat's.
+
+**Q53. One reference layout per regular.** The coverage test from step 5 asks
+for one per regular plus one for all twelve, and it stands unchanged. Places 1
+to 4 each have a single line taken from the addendum's layout. Places 5 to 12
+each have their own layout, and every one fits the starting six rows with
+every cup Just in Time. No regular needed more rows, so there is no "nearest
+slot" to log. `src/levels/layouts.ts`.
+
+**Q54. The all-twelve layout.** It needs 12 rows (6 bought) and serves all
+twelve every loop. Ten are Just in Time; the any-tick lamplighter and sweep
+take slots 7 and 1. Every cup rides in its ladder slot, so no two cups ever
+meet on the feeder. The only spill is well C's spare bucket, which lands in a
+roaster. Built at the start of a `?debug` shop, it seats all twelve strictly
+in order in play while the milk order grows from one pail to three
+(`tests/game/ladder.test.ts`). It settles within 5 loops from an empty floor,
+not 3. Its shape:
+- rows 0 to 4: the addendum's layout for places 1 to 4, unchanged;
+- the side door and a three-output splitter by the bowl. Pail 1 goes north
+  to the cat's kettle. Pails 2 and 3 climb columns 6 and 7, cross the row 5
+  corridor by chute, and merge with pail 3 two ticks behind;
+- row 5: a corridor west into the feeder. Well B's kettles (top right) drop
+  the apothecary's, baker's and postwoman's cups into it, and the witch's
+  espresso comes down column 11;
+- top left: well C feeds the innkeeper's kettle and two roasters. One mixer
+  makes both milk drinks: coffee meets pail 2 on tick 6 (au lait, slot 8)
+  and espresso meets pail 3 on tick 8 (latte, slot 10).
+It was laid out with a throwaway routing script (not in the repo) that fills
+in belt and spring runs of an exact length between hand-placed machines.
+
+**Q55. Steps 5 and 6 were already built.** This brief treats step 5 as not yet
+done and says to stop before step 6, but both were committed before the
+addendum. Step 5 was redone under the addendum as above. Step 6 (save and
+load, offline loyalty, the morning report) was only touched so it compiles
+and validates the new pieces (Q47). Nothing was added to it.
 

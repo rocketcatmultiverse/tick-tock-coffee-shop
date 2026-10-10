@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { planBuild, rightsAfter, type TileChange } from '../../src/game/build';
 import { emptyLayout, tileIndex } from '../../src/sim/grid';
 import type { RegularDef } from '../../src/sim/types';
+import { ALL_PIECES } from '../../src/game/pieces';
+import { Shop } from '../../src/game/shop';
+import { REGULARS } from '../../src/levels/regulars';
 
 const order = { drink: 'coffee', roast: 'any', tick: 'any', grace: 0 } as const;
 const DEFS: RegularDef[] = [
@@ -77,10 +80,25 @@ describe('Unlocks', () => {
         { index: tileIndex(1, 1), to: { kind: 'mixer', out: 'S' } },
         { index: tileIndex(2, 2), to: { kind: 'well' } },
         { index: tileIndex(3, 3), to: { kind: 'well' } },
+        { index: tileIndex(4, 4), to: { kind: 'spring', dir: 'W' } },
+        { index: tileIndex(4, 6), to: { kind: 'splitter' } },
+        { index: tileIndex(5, 5), to: { kind: 'roaster', out: 'E' } },
+        { index: tileIndex(5, 1), to: { kind: 'launch', dir: 'E' } },
+        { index: tileIndex(5, 3), to: { kind: 'catch', dir: 'E' } },
       ],
       rights,
       TILL,
     );
     expect(plan.ok).toBe(true);
+    expect([...rights.unlocked].sort()).toEqual([...ALL_PIECES].sort());
+  });
+
+  it('a debug shop starts with 9,999 coins and every piece in the palette', () => {
+    const shop = new Shop({ defs: REGULARS, debug: true });
+    expect(shop.till).toBe(9999);
+    expect([...shop.rights().unlocked].sort()).toEqual([...ALL_PIECES].sort());
+    expect(shop.rights().wellLimit).toBe(Infinity);
+    // Regulars still arrive in order.
+    expect(shop.regulars.map((r) => r.id)).toEqual(['lamplighter']);
   });
 });

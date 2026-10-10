@@ -28,11 +28,9 @@ function cycleOf(id: string) {
 }
 
 describe('Reference layouts', () => {
-  it('places 1 to 4 share one fixture, and the milk corner serves places 10 to 12', () => {
-    // Places 5 to 12 owe their own layouts to step 5 (docs/ADDENDUM-01.md, "Levels").
-    const served = new Set(REFERENCE_LAYOUTS.flatMap((r) => r.serves));
-    for (const def of REGULARS.slice(0, 4)) expect(served.has(def.id), def.id).toBe(true);
-    expect(REFERENCE_LAYOUTS.find((r) => r.id === 'milk-corner')?.serves).toEqual(['cat', 'innkeeper', 'mayor']);
+  it('there is one per regular and one serving all twelve', () => {
+    for (const def of REGULARS) expect(REFERENCE_LAYOUTS.some((r) => r.id === def.id), def.id).toBe(true);
+    expect(REFERENCE_LAYOUTS.find((r) => r.id === 'all-twelve')?.serves.length).toBe(12);
   });
 
   for (const ref of REFERENCE_LAYOUTS) {
@@ -80,5 +78,11 @@ describe('Reference layouts', () => {
     expect(events.filter((e) => e.type === 'milk').length, floor).toBe(3);
     expect(events.filter((e) => e.type === 'spill' && e.item.kind !== 'water'), floor).toEqual([]);
     expect(events.filter((e) => e.type === 'end'), floor).toEqual([]);
+  });
+
+  it('the all-twelve layout lets nothing run off the end of the counter', () => {
+    const { events, floor } = cycleOf('all-twelve');
+    expect(events.filter((e) => e.type === 'end'), floor).toEqual([]);
+    expect(events.filter((e) => e.type === 'serve').length, floor).toBe(12);
   });
 });
