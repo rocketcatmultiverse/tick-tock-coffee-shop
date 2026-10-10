@@ -7,14 +7,14 @@ import { startLayout } from '../../src/game/build';
 import { parseLayout } from '../../src/sim/text';
 
 describe('Counter strip', () => {
-  it('reads Just in Time, within grace and the cups on each tile from steady state', () => {
+  it('reads Just in Time, served (any tick) and the cups on each tile from steady state', () => {
     const layout = parseLayout(REFERENCE_LAYOUTS.find((r) => r.id === 'all-four')!.rows);
     const four = REGULARS.slice(0, 4);
     const strip = counterStrip(layout, four.map(seatFor), four)!;
     const byId = (id: string) => strip.find((c) => c.stool?.def.id === id)!;
     // Slots on the belt: 9 medium (taken on column 0), 7 medium, 1 dark, 5 dark. Slot k is in front of column c on tick k + c.
-    expect(byId('lamplighter').stool).toMatchObject({ result: 'grace', tick: 11, item: { kind: 'coffee', roast: 'medium' } });
-    expect(byId('sweep').stool).toMatchObject({ result: 'grace', tick: 0, item: { kind: 'coffee', roast: 'dark' } });
+    expect(byId('lamplighter').stool).toMatchObject({ result: 'served', tick: 11, item: { kind: 'coffee', roast: 'medium' } });
+    expect(byId('sweep').stool).toMatchObject({ result: 'served', tick: 0, item: { kind: 'coffee', roast: 'dark' } });
     expect(byId('clockmaker').stool).toMatchObject({ result: 'justInTime', tick: 9, item: { kind: 'coffee', roast: 'medium' } });
     expect(byId('gargoyle').stool).toMatchObject({ result: 'justInTime', tick: 11 });
     expect(strip[0].cupTicks).toEqual([1, 5, 7, 9]);

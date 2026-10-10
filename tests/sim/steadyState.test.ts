@@ -14,7 +14,7 @@ describe('Steady state', () => {
       'F . . Pv . . . . . . . .',
       'F < < K< . . . . . . . .',
     ]);
-    const seat: Seat = { col: 9, drink: 'coffee', roast: 'any', tick: 'any', grace: 0 };
+    const seat: Seat = { col: 9, drink: 'coffee', roast: 'any', tick: 'any' };
     const cycle = findCycle(layout, { seats: [seat], milkPails: 3 });
     expect(cycle, renderFloor(layout, emptyState(layout))).not.toBeNull();
     expect(cycle!.loops).toBe(1);
@@ -31,7 +31,7 @@ describe('Steady state', () => {
       'F . Pv W P^ . . . . . . .',
       'F < K< . . . . . . . . .',
     ]);
-    const seats: Seat[] = [{ col: 10, drink: 'coffee', roast: 'medium', tick: 'any', grace: 0 }];
+    const seats: Seat[] = [{ col: 10, drink: 'coffee', roast: 'medium', tick: 'any' }];
     const cycle = findCycle(layout, { seats, milkPails: 3 })!;
     expect(cycle.loops).toBe(1);
     expect(cycle.servesPerLoop).toEqual([1]);

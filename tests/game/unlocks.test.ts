@@ -6,7 +6,7 @@ import { ALL_PIECES } from '../../src/game/pieces';
 import { Shop } from '../../src/game/shop';
 import { REGULARS } from '../../src/levels/regulars';
 
-const order = { drink: 'coffee', roast: 'any', tick: 'any', grace: 0 } as const;
+const order = { drink: 'coffee', roast: 'any', tick: 'any' } as const;
 const DEFS: RegularDef[] = [
   { id: 'a', name: 'A', intro: '', col: 3, order },
   { id: 'b', name: 'B', intro: '', col: 5, order, wellLimit: 2 },

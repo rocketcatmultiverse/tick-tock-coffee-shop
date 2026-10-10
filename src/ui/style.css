@@ -440,7 +440,7 @@ details > summary {
   color: #b9dfa0;
 }
 
-.strip .cell.grace {
+.strip .cell.served {
   border: 2.5px dashed var(--gold);
   color: #f2d48e;
 }

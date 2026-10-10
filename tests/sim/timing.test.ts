@@ -22,7 +22,7 @@ describe('Timing equations', () => {
     const plain = (belts: number): Run => ({ belts, springs: 0 });
     const layout = buildLine({ b1: plain(2), b2: plain(2), b3: plain(2), row: 0 }, rand);
     // b3 = 2 belts + 1 feeder tile = 3, so the slot is (8 + 1 + 3) mod 12 = 0 and the stool on column 10 sees it on tick 10.
-    const seat: Seat = { col: 10, drink: 'coffee', roast: 'dark', tick: 10, grace: 0 };
+    const seat: Seat = { col: 10, drink: 'coffee', roast: 'dark', tick: 10 };
     const run = start(layout, [seat]);
     runTo(run, 36);
     expect(allOf(run, 'water').map((e) => e.T), floor(run)).toEqual([2, 14, 26]);
@@ -48,7 +48,7 @@ describe('Timing equations', () => {
       const slot = tJoin % 12;
       const tServe = tJoin + s;
       const roast = roastForTick(tKettle % 12);
-      const seat: Seat = { col: s, drink: 'coffee', roast, tick: (slot + s) % 12, grace: 0 };
+      const seat: Seat = { col: s, drink: 'coffee', roast, tick: (slot + s) % 12 };
       const run = start(layout, [seat]);
       const label = `${JSON.stringify(spec)} s=${s}\n${layoutToText(layout).join('\n')}`;
 

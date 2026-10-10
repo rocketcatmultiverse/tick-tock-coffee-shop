@@ -19,20 +19,20 @@ export function emptyState(layout: Layout, seatCount = 0): SimState {
 
 /**
  * How far into their visit a seat is on tick `T`, or null when they are not
- * at the counter. A visit runs from their tick to their tick plus grace.
- * Regulars with tick 'any' are always there; what they take is limited by
- * ANY_TICK_WAIT instead (docs/ADDENDUM-01.md, "Any-tick regulars").
+ * at the counter. A timed regular's visit is their own tick and nothing else:
+ * there is no grace (docs/QUESTIONS.md, Q61). Regulars with tick 'any' are
+ * always there; what they take is limited by ANY_TICK_WAIT instead
+ * (docs/ADDENDUM-01.md, "Any-tick regulars").
  */
 export function visitOffset(seat: Seat, T: number): number | null {
   const t = clockTick(T);
   if (seat.tick === 'any') return t;
-  const off = (((t - seat.tick) % LOOP) + LOOP) % LOOP;
-  return off <= seat.grace ? off : null;
+  return t === seat.tick ? 0 : null;
 }
 
 /** The last offset of a visit: the tick they leave after. */
 export function visitLength(seat: Seat): number {
-  return seat.tick === 'any' ? LOOP - 1 : seat.grace;
+  return seat.tick === 'any' ? LOOP - 1 : 0;
 }
 
 export function isPresent(seat: Seat, T: number): boolean {

@@ -46,7 +46,7 @@ differ for a fussy regular with grace. *Assumed:* the check happens once,
 when they arrive on their own tick, against what the tile held at the end
 of the tick before (after any cup taken there was removed). If it was busy,
 they refuse the right cup for the whole visit. Seats arriving block in
-`src/sim/step.ts`; new `SimState.blocked` field.
+`src/sim/step.ts`; new `SimState.blocked` field. *Superseded: with no grace a fussy regular is only ever at the counter on their own tick (Q61); the check stands.*
 
 **Q7. The cat's window crosses tick 0.** "Waits there for 3 ticks" with grace
 3 means, by the grace rule, the cat is at the bowl on ticks 10, 11, 0 and 1.
@@ -54,13 +54,13 @@ they refuse the right cup for the whole visit. Seats arriving block in
 let it drink again on tick 0. *Assumed:* the refusal lasts for the rest of
 that visit (through tick 1). Plain milk only makes the cat bolt while it is
 at the bowl; at any other time it just spills. Same `blocked` field; test in
-`tests/sim/bowl.test.ts`.
+`tests/sim/bowl.test.ts`. *Superseded: the cat is at the bowl on tick 10 only (Q61).*
 
 **Q8. Windows wrap at the very start.** A visit that crosses tick 0 (the
 gargoyle's 11 to 2, the cat's 10 to 1) is treated as periodic from T = 0, so
 on the first tick of a new game such a regular already counts as present,
 partway through a visit. This keeps every layout exactly periodic.
-`visitOffset` in `src/sim/state.ts`.
+`visitOffset` in `src/sim/state.ts`. *Superseded: with no grace, no timed visit crosses tick 0 (Q61).*
 
 **Q9. When does an any-tick regular's loop start?** "They take the first
 matching cup to pass their stool each loop". *Assumed:* the loop is clock
@@ -401,4 +401,19 @@ loaded from Google at run time. Both are under the SIL Open Font License,
 which asks for the licence to travel with the fonts. The official OFL files
 are in `public/licenses/` (copied into the build) and linked from the Keys
 card. Fonts are assets, not dependencies; nothing was added to package.json.
+
+## Design changes from play-testing
+
+**Q61. Grace is gone.** *Your decision, from play-testing:* grace was
+distracting and did not lead towards the final solutions. A timed regular,
+the cat included, is at the counter (or the bowl) on their own tick only and
+takes the right cup only if it is in front of them then. That is always Just
+in Time, so a timed regular always pays the price plus the bonus. Any-tick
+regulars are unchanged and pay the plain price. This overrides Rules 5 (the
+grace period and its plain price), the `grace` field in Spec 3 and in the
+addendum's ladder table, Spec 5's grace column, and the cat's three ticks at
+the bowl in Rules 5. The gargoyle's intro no longer promises three more
+ticks. Every reference layout already served its timed regulars Just in
+Time, so none changed. `visitOffset` in `src/sim/state.ts`; the strip now
+reads Just in Time, served (any tick) or missed.
 

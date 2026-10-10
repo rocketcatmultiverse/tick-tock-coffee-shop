@@ -18,7 +18,6 @@ export function seatFor(def: RegularDef): Seat {
     drink: def.order.drink,
     roast: def.order.roast,
     tick: def.order.tick,
-    grace: def.order.grace,
     fussy: def.order.fussy,
     ...(def.bowl ? { bowl: tileIndex(BOWL_ROW, BOWL_COL) } : {}),
   };
@@ -37,11 +36,11 @@ const DRINK_NAME: Record<Drink, string> = {
   latte: 'latte',
 };
 
-/** "Medium coffee, tick 5, grace 2" and the like. */
+/** "Medium coffee, tick 9 (slot 9)" and the like. */
 export function describeOrder(def: RegularDef): string {
   const o = def.order;
   const what = `${o.roast === 'any' ? '' : o.roast[0].toUpperCase() + o.roast.slice(1) + ' '}${DRINK_NAME[o.drink]}`;
   const slot = def.bowl || o.tick === 'any' ? '' : ` (slot ${slotOf(o.tick, def.col)})`;
-  const when = o.tick === 'any' ? 'any tick' : `tick ${o.tick}${slot}, grace ${o.grace}`;
+  const when = o.tick === 'any' ? 'any tick' : `tick ${o.tick}${slot}`;
   return `${what}${def.bowl ? ' in the bowl' : ''}, ${when}${o.fussy ? ', fussy' : ''}`;
 }

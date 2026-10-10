@@ -88,7 +88,7 @@ describe('Spring', () => {
 
   it('swapping one belt tile for a spring moves a cup 3 slots later', () => {
     // A medium line joins the feeder in row 0; between kettle and feeder are three belts, or two belts and a spring.
-    const seat: Seat = { col: 11, drink: 'coffee', roast: 'any', tick: 'any', grace: 0 };
+    const seat: Seat = { col: 11, drink: 'coffee', roast: 'any', tick: 'any' };
     const slot = (rows: string[]) => {
       const run = start(rows, [seat]);
       runTo(run, 40);

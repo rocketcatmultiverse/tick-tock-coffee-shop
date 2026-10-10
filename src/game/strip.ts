@@ -7,7 +7,8 @@ import type { Item, Layout, RegularDef, Seat } from '../sim/types';
 import { LOOP } from '../sim/tuning';
 import { isMilkDrinker } from './regulars';
 
-export type StoolResult = 'justInTime' | 'grace' | 'miss';
+/** Timed regulars are served Just in Time or not at all; any-tick regulars are simply served. */
+export type StoolResult = 'justInTime' | 'served' | 'miss';
 
 export interface StripCell {
   col: number;
@@ -47,7 +48,7 @@ export function counterStrip(layout: Layout, seats: Seat[], defs: readonly Regul
       tk.events.flatMap((e) => (e.type === 'serve' && e.seat === i ? [{ T: tk.T, e }] : [])),
     );
     let result: StoolResult = 'miss';
-    if (serves.length >= cycle.loops) result = serves.every((s) => s.e.justInTime) && seat.tick !== 'any' ? 'justInTime' : 'grace';
+    if (serves.length >= cycle.loops) result = serves.every((s) => s.e.justInTime) && seat.tick !== 'any' ? 'justInTime' : 'served';
     let tick: number | null = seat.tick === 'any' ? null : seat.tick;
     let item: Item | null = null;
     if (seat.tick === 'any') {

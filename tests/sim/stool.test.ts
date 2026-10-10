@@ -3,7 +3,7 @@ import { counterIndex, emptyLayout } from '../../src/sim/grid';
 import type { Item, Seat } from '../../src/sim/types';
 import { allOf, floor, runTo, start } from '../helpers';
 
-const SEAT: Seat = { col: 6, drink: 'coffee', roast: 'medium', tick: 5, grace: 2 };
+const SEAT: Seat = { col: 6, drink: 'coffee', roast: 'medium', tick: 5 };
 const RIGHT: Item = { kind: 'coffee', roast: 'medium' };
 /**
  * Each cup is put on the counter one column short of the stool, so it is in
@@ -29,14 +29,21 @@ describe('Stool', () => {
     expect(allOf(run, 'end'), floor(run)).toEqual([]);
   });
 
-  for (const T of [6, 7, 18, 19]) {
-    it(`takes the right drink within grace on T=${T}: plain price`, () => {
-      const run = serveAt([[T, RIGHT]]);
-      expect(allOf(run, 'serve').map((e) => [e.T, e.justInTime]), floor(run)).toEqual([[T, false]]);
-    });
-  }
+  it('takes it on their tick in every loop', () => {
+    const run = serveAt([
+      [5, RIGHT],
+      [17, RIGHT],
+      [29, RIGHT],
+    ]);
+    expect(allOf(run, 'serve').map((e) => [e.T, e.justInTime]), floor(run)).toEqual([
+      [5, true],
+      [17, true],
+      [29, true],
+    ]);
+  });
 
-  for (const T of [4, 8, 11, 12]) {
+  // No grace (a design decision, docs/QUESTIONS.md Q61): a cup even one tick late is not theirs.
+  for (const T of [4, 6, 7, 8, 11, 12, 18]) {
     it(`lets the right drink go by outside their window (T=${T}), and it runs off the end`, () => {
       const run = serveAt([[T, RIGHT]]);
       expect(allOf(run, 'serve'), floor(run)).toEqual([]);

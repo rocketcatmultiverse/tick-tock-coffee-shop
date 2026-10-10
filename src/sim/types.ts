@@ -49,8 +49,7 @@ export interface Seat {
   col: number; // counter column the stool faces
   drink: Drink;
   roast: Roast | 'any';
-  tick: number | 'any'; // 'any' = takes the first matching cup, then nothing for ANY_TICK_WAIT ticks
-  grace: number; // ticks they stay after their own tick, 0 to 3
+  tick: number | 'any'; // 'any' = takes the first matching cup, then nothing for ANY_TICK_WAIT ticks; a timed regular is there on this tick only
   fussy?: boolean; // refuses their cup if anything was on their tile the tick before
   bowl?: number; // the cat only: back-room tile of its bowl, used instead of col
 }
@@ -91,8 +90,7 @@ export interface RegularDef {
   order: {
     drink: Drink;
     roast: Roast | 'any';
-    tick: number | 'any'; // 'any' for the first two regulars
-    grace: 0 | 1 | 2 | 3; // ticks they stay after their own tick
+    tick: number | 'any'; // 'any' for the first two regulars; no grace (docs/QUESTIONS.md, Q61)
     fussy?: boolean;
   };
   bowl?: boolean; // the cat: served at its bowl in the back room, not at a stool

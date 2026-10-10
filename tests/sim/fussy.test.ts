@@ -3,7 +3,7 @@ import { counterIndex, emptyLayout } from '../../src/sim/grid';
 import type { Item, Seat } from '../../src/sim/types';
 import { allOf, floor, runTo, start } from '../helpers';
 
-const ALCHEMIST: Seat = { col: 6, drink: 'espresso', roast: 'dark', tick: 6, grace: 0, fussy: true };
+const ALCHEMIST: Seat = { col: 6, drink: 'espresso', roast: 'dark', tick: 6, fussy: true };
 const RIGHT: Item = { kind: 'espresso', roast: 'dark' };
 /** Only the feeder puts cups on the counter, so tests place them there directly. */
 function setup() {
@@ -16,7 +16,7 @@ function sendIn(run: ReturnType<typeof setup>, item: Item) {
 }
 
 describe('Fussy', () => {
-  it('with grace 0, takes the cup only on the exact tick', () => {
+  it('takes the cup only on the exact tick', () => {
     for (const T of [5, 6, 7, 18]) {
       const run = setup();
       runTo(run, T);

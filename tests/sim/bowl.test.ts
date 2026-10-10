@@ -5,7 +5,7 @@ import { EMPTY, allOf, floor, runTo, start } from '../helpers';
 
 const BOWL = tileIndex(1, 11);
 const FEED = tileIndex(1, 10);
-const CAT: Seat = { col: 11, drink: 'warmMilk', roast: 'any', tick: 10, grace: 3, bowl: BOWL };
+const CAT: Seat = { col: 11, drink: 'warmMilk', roast: 'any', tick: 10, bowl: BOWL };
 const WARM: Item = { kind: 'warmMilk' };
 const MILK: Item = { kind: 'milk' };
 
@@ -21,7 +21,8 @@ function feed(items: [number, Item][], seats: Seat[] = [CAT]) {
 }
 
 describe('Bowl', () => {
-  for (const T of [10, 11, 12, 13, 22]) {
+  // No grace (docs/QUESTIONS.md Q61): the cat is at the bowl on tick 10 only.
+  for (const T of [10, 22, 34]) {
     it(`warm milk landing while the cat is there (T=${T}) is drunk`, () => {
       const run = feed([[T, WARM]]);
       expect(allOf(run, 'serve').map((e) => [e.T, e.seat, e.at, e.justInTime]), floor(run)).toEqual([
@@ -31,7 +32,7 @@ describe('Bowl', () => {
     });
   }
 
-  for (const T of [2, 9, 14, 21]) {
+  for (const T of [2, 9, 11, 12, 13, 14, 21]) {
     it(`warm milk landing when the cat is not there (T=${T}) spills`, () => {
       const run = feed([[T, WARM]]);
       expect(allOf(run, 'serve'), floor(run)).toEqual([]);
@@ -39,27 +40,29 @@ describe('Bowl', () => {
     });
   }
 
-  it('the cat drinks once per visit', () => {
+  it('the cat drinks once a loop', () => {
     const run = feed([
       [10, WARM],
       [11, WARM],
+      [22, WARM],
     ]);
-    expect(allOf(run, 'serve').map((e) => e.T), floor(run)).toEqual([10]);
+    expect(allOf(run, 'serve').map((e) => e.T), floor(run)).toEqual([10, 22]);
     expect(allOf(run, 'spill').map((e) => e.T), floor(run)).toEqual([11]);
   });
 
-  it('plain milk makes the cat bolt and refuse the bowl for the rest of that visit', () => {
-    const run = feed([
-      [10, MILK],
-      [11, WARM],
-      [13, WARM],
-      [22, WARM],
-    ]);
+  it('plain milk makes the cat bolt: warm milk landing with it on the same tick is refused', () => {
+    // Plain milk from the north beats warm milk from the west, so the cat sees the plain milk first.
+    const run = start(['. . . . . . . . . . . v', '. . . . . . . . . . > B', EMPTY], [CAT]);
+    for (const T of [10, 22]) {
+      runTo(run, T);
+      if (T === 10) run.state.belts[tileIndex(2, 11)] = MILK;
+      run.state.belts[FEED] = WARM;
+    }
+    runTo(run, 30);
     expect(allOf(run, 'bolt').map((e) => e.T), floor(run)).toEqual([10]);
     expect(allOf(run, 'spill').map((e) => [e.T, e.item.kind]), floor(run)).toEqual([
       [10, 'milk'],
-      [11, 'warmMilk'],
-      [13, 'warmMilk'],
+      [10, 'warmMilk'],
     ]);
     expect(allOf(run, 'serve').map((e) => e.T), floor(run)).toEqual([22]);
   });

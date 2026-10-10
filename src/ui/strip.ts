@@ -1,5 +1,5 @@
 // The counter strip: one cell per counter column, under the floor. Just in
-// Time, within grace, a miss and no stool differ by shape as well as colour.
+// Time, served (any tick), a miss and no stool differ by shape as well as colour.
 
 import { itemName } from '../sim/items';
 import type { StripCell } from '../game/strip';
@@ -8,8 +8,8 @@ import { itemKey } from './art/svg';
 import { PAD, TILE } from './geometry';
 import { el } from './panel';
 
-const SHAPE = { justInTime: '●', grace: '◐', miss: '✕' } as const;
-const WORD = { justInTime: 'Just in Time', grace: 'within grace', miss: 'missed' } as const;
+const SHAPE = { justInTime: '●', served: '◐', miss: '✕' } as const;
+const WORD = { justInTime: 'Just in Time', served: 'served', miss: 'missed' } as const;
 
 export function shortName(name: string): string {
   const word = name.replace(/^(The|Your) /, '');

@@ -185,7 +185,7 @@ class App {
     const parts = [`Row ${h.row}, column ${h.col}`];
     if (s) parts.push(`${s.kind} (${structureToken(s)})`);
     if (item) parts.push(`holding ${itemName(item)}`);
-    if (s?.kind === 'bowl') parts.push(this.catSeat() >= 0 ? 'the cat wants warm milk here on ticks 10 to 1' : 'the cat is not asking yet');
+    if (s?.kind === 'bowl') parts.push(this.catSeat() >= 0 ? 'the cat wants warm milk here on tick 10' : 'the cat is not asking yet');
     if (s?.kind === 'feeder') parts.push(`the only way onto the counter; slot ${feederSlot(this.shop.T - 1, h.row)} is passing`);
     const cat = this.catAt();
     if (cat.row === h.row && cat.col === h.col) parts.push(`${this.shop.catName || 'your cat'} (click to name or pet)`);

@@ -17,8 +17,8 @@ const BUSY = parseLayout([
 ]);
 
 const SEATS: Seat[] = [
-  { col: 3, drink: 'coffee', roast: 'any', tick: 'any', grace: 0 },
-  { col: 9, drink: 'coffee', roast: 'dark', tick: 2, grace: 2, fussy: true },
+  { col: 3, drink: 'coffee', roast: 'any', tick: 'any' },
+  { col: 9, drink: 'coffee', roast: 'dark', tick: 2, fussy: true },
 ];
 
 function runAll(ticks: number): { events: SimEvent[][]; final: SimState } {

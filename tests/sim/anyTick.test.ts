@@ -7,7 +7,7 @@ import { counterIndex, emptyLayout } from '../../src/sim/grid';
 import type { Item, Seat } from '../../src/sim/types';
 import { allOf, floor, runTo, start } from '../helpers';
 
-const ANY: Seat = { col: 6, drink: 'coffee', roast: 'medium', tick: 'any', grace: 0 };
+const ANY: Seat = { col: 6, drink: 'coffee', roast: 'medium', tick: 'any' };
 const RIGHT: Item = { kind: 'coffee', roast: 'medium' };
 
 /** Each cup is in front of the stool on the given T. */
