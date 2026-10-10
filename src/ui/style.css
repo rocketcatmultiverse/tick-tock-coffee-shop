@@ -199,3 +199,9 @@ button.active {
   color: #444;
   font-size: 12px;
 }
+
+.cat-card input {
+  font: inherit;
+  margin: 4px 6px 4px 0;
+  width: 150px;
+}

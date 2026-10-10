@@ -161,3 +161,43 @@ number of ticks played.
 
 **Q27. Debug flag.** `?debug` unlocks every piece, lifts the well limit and
 starts the till at 9,999. Regulars still arrive in order.
+
+## The rest of the ladder (step 5)
+
+**Q28. Stool columns for regulars 5 to 12.** *Chosen:* mayor 1, postwoman 2,
+witch 4, innkeeper 6, apothecary 7, baker 8, alchemist 10. Column 0 has no
+stool. `src/levels/regulars.ts`. They were chosen so that, with every cup
+joining the counter at column 1 and riding to its stool (the all-twelve
+layout):
+- no medium coffee passes the lamplighter before his own cup each loop, and
+  no dark coffee passes the sweep before his;
+- the two light-coffee regulars never see each other's cup inside their
+  windows;
+- nothing passes the fussy alchemist's tile on tick 5.
+
+**Q29. The cat as slot 10.** *Assumed:* the cat is a regular definition with
+`bowl: true`, served at the bowl instead of a stool, paying nothing. It
+"walks in" (starts asking) once regular 9 is seated, through the normal
+queue, and that is when the back door unlocks. Its walk is cosmetic: before
+it asks it loops the back corner; once asking it waits at the bowl on ticks
+10, 11, 0 and 1. Clicking it opens a card to name or pet it. Petting shows a
+heart, unless it bolted from plain milk this visit (it is mad), and 30% of
+the time it does not care. Both moods are cosmetic and use `Math.random` in
+`src/ui/catCard.ts`. The name is kept on the shop for saving.
+
+**Q30. The all-twelve layout.** Spec 6 asks for one layout serving all twelve.
+It exists, so the gray-box ladder is solvable as written, but it took a
+search script, not hand design. Its structure: every cup feeds one bus belt
+down column 6. The bus crosses the cat's milk line with a single chute at
+column 1 and joins the counter there. Each cup arrives on a different tick of
+the loop, so cups never collide on the shared bus, and each rides to its own
+stool. It uses 3 wells, 3 back doors, 2 roasters, 2 mixers and 1 chute, and
+buys 18 floor rows (24 rows deep). Five of the nine timed regulars are served
+Just in Time and the rest within grace.
+
+**Q31. Fixture checks.** Each reference layout now states how many floor rows
+it buys and which regulars it serves Just in Time. The test also builds it
+through the normal build rules with only the pieces and wells unlocked by
+that point in the ladder. The step-3 tests that meant "regulars 1 to 4" now
+use the first four definitions explicitly, since the list has grown to
+twelve.

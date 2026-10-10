@@ -31,7 +31,7 @@ export interface View {
   readouts: Map<number, { tick: number; roast: Roast | null }>;
   stools: StoolView[];
   shelf: ShelfCupView[];
-  cat: Spot | null;
+  cat: { spot: Spot; heart: boolean; mad: boolean } | null;
 }
 
 const COLOR = {
@@ -325,16 +325,26 @@ export function draw(ctx: CanvasRenderingContext2D, view: View): void {
     }
   }
 
-  // The cat: a plain marker.
-  if (view.cat && view.cat.row < rows) {
-    const { x, y } = tileXY(rows, view.cat.row, view.cat.col);
-    ctx.fillStyle = '#222';
+  // The cat: a plain marker, with a heart when petted and a scowl when mad.
+  if (view.cat && view.cat.spot.row < rows) {
+    const { x, y } = tileXY(rows, view.cat.spot.row, view.cat.spot.col);
+    ctx.fillStyle = view.cat.mad ? '#b00020' : '#222';
     ctx.beginPath();
     ctx.moveTo(x + TILE - 16, y + 6);
     ctx.lineTo(x + TILE - 4, y + 6);
     ctx.lineTo(x + TILE - 10, y + 16);
     ctx.closePath();
     ctx.fill();
+    ctx.font = 'bold 12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    if (view.cat.heart) {
+      ctx.fillStyle = '#e0245e';
+      ctx.fillText('♥', x + TILE - 10, y + 6);
+    } else if (view.cat.mad) {
+      ctx.fillStyle = '#b00020';
+      ctx.fillText('!', x + TILE - 10, y + 6);
+    }
   }
 
   // Splashes for this tick's spills.

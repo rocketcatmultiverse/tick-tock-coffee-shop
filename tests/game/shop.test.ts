@@ -28,7 +28,7 @@ describe('Shop', () => {
   });
 
   it('regulars 1 to 4 arrive strictly in order, each once the one before is served', () => {
-    const shop = new Shop({ defs: REGULARS, debug: true });
+    const shop = new Shop({ defs: REGULARS.slice(0, 4), debug: true });
     expect(shop.build(layoutChanges('all-four')).ok).toBe(true);
     const arrivals: [number, number][] = [];
     for (let k = 0; k < 120; k++) {

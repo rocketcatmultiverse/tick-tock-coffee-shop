@@ -11,6 +11,8 @@ export interface InputHost {
   render(): void;
   togglePause(): void;
   stepOnce(): void;
+  /** A click with nothing in hand, for things on the floor such as the cat. */
+  clickFloor(spot: Spot): void;
 }
 
 export function bindInput(canvas: HTMLCanvasElement, host: InputHost): void {
@@ -50,6 +52,7 @@ export function bindInput(canvas: HTMLCanvasElement, host: InputHost): void {
       else ed.message = 'The counter belt is fixed';
     } else {
       ed.selection = null;
+      host.clickFloor(spot);
     }
     host.render();
   });

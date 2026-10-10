@@ -6,6 +6,7 @@ import { adaptState, emptyLayout, emptyState, isDrink, itemName, step, tileIndex
 import type { Drink, Item, Layout, RegularDef, Seat, SimEvent, SimState } from '../sim/types';
 import { COLS, LOOP } from '../sim/tuning';
 import { type BuildPlan, type BuildRights, type TileChange, planBuild, rightsAfter } from './build';
+import { PIECE_LABEL } from './pieces';
 import { type RegularState, seatFor } from './regulars';
 import { type Rng, makeRng, nextRandom } from './rng';
 import {
@@ -52,6 +53,8 @@ export class Shop {
   sim: SimState;
   till: number;
   gears = 0;
+  /** Chosen by the player; empty until then. */
+  catName = '';
   /** Regulars who have walked in, in order. The last one may still be new. */
   regulars: RegularState[] = [];
   shelf: ShelfCup[] = [];
@@ -83,7 +86,7 @@ export class Shop {
     return rightsAfter(this.defs, this.regulars.length, this.debug);
   }
 
-  /** Seats for every regular who has walked in, in order. The cat's bowl is inert in the gray box. */
+  /** Seats for every regular who has walked in, in order. The cat's seat is its bowl. */
   seats(): Seat[] {
     return this.regulars.map((_, i) => seatFor(this.defs[i]));
   }
@@ -190,12 +193,20 @@ export class Shop {
     return Math.floor(DRINK_PRICE[item.kind] * WALK_IN_PRICE_SHARE);
   }
 
+  /** The next regular walks in with their stool, and anything they unlock. */
   private walkIn(): string {
+    const before = this.rights();
     const def = this.defs[this.regulars.length];
     this.regulars.push({ id: def.id, status: 'new', loyalty: 0 });
     this.visitServed.push(false);
     this.sim = adaptState(this.layout, this.layout, this.sim, this.regulars.length);
-    return `${def.name} walks in: "${def.intro}"`;
+    const after = this.rights();
+    const extra: string[] = [];
+    const fresh = [...after.unlocked].filter((p) => !before.unlocked.has(p));
+    if (fresh.length) extra.push(`New in the palette: ${fresh.map((p) => PIECE_LABEL[p]).join(', ')}.`);
+    if (after.wellLimit > before.wellLimit) extra.push(`You may now own ${after.wellLimit} wells.`);
+    const arrives = def.bowl ? `${def.name} starts asking for warm milk at the bowl` : `${def.name} walks in`;
+    return [`${arrives}: "${def.intro}"`, ...extra].join(' ');
   }
 
   /** Check an edit; if it is allowed, apply it to the live floor and pay for it. */

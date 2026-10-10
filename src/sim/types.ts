@@ -88,6 +88,7 @@ export interface RegularDef {
     grace: 0 | 1 | 2 | 3; // ticks they stay after their own tick
     fussy?: boolean;
   };
+  bowl?: boolean; // the cat: served at its bowl in the back room, not at a stool
   unlocks?: StructureKind[]; // pieces added to the palette when they walk in
   wellLimit?: number; // raises the number of wells you may own
   paysIn?: 'coins' | 'gears' | 'nothing'; // coins unless stated

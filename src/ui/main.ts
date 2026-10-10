@@ -6,6 +6,7 @@ import { Shop } from '../game/shop';
 import { type StripCell, counterStrip } from '../game/strip';
 import { REGULARS } from '../levels/regulars';
 import { catSpot } from './cat';
+import { CatCard } from './catCard';
 import { RegularsPanel } from './regularsPanel';
 import { StripView, shortName } from './strip';
 import { Editor } from './editor';
@@ -28,6 +29,14 @@ class App {
   private stripView = new StripView();
   private regularsPanel = new RegularsPanel();
   private notes: string[] = [];
+  private catCard = new CatCard({
+    getName: () => this.shop.catName,
+    setName: (n) => {
+      this.shop.catName = n;
+    },
+    isMad: () => this.catMad(),
+    render: () => this.render(),
+  });
   /** Steady state is recomputed only when the layout or the seats change. */
   private stripCache: { layout: Layout; seats: number; strip: StripCell[] | null } | null = null;
 
@@ -64,11 +73,30 @@ class App {
       },
       debug,
     );
-    this.panel.extra.append(this.regularsPanel.root);
+    this.panel.extra.append(this.catCard.root, this.regularsPanel.root);
     root.append(el('main', { className: 'floor-wrap' }, this.canvas, this.stripView.root), this.panel.root);
     bindInput(this.canvas, this);
     this.schedule();
     this.render();
+  }
+
+  /** The cat's seat, once it has started asking for milk. */
+  private catSeat(): number {
+    return this.shop.regulars.findIndex((_, i) => this.shop.defs[i].bowl);
+  }
+
+  private catMad(): boolean {
+    const i = this.catSeat();
+    return i >= 0 && this.shop.sim.blocked[i] === true;
+  }
+
+  private catAt(): Spot {
+    return catSpot(Math.max(0, this.shop.T - 1), this.catSeat() >= 0);
+  }
+
+  clickFloor(spot: Spot): void {
+    const cat = this.catAt();
+    if (spot.row === cat.row && spot.col === cat.col) this.catCard.open();
   }
 
   rows(): number {
@@ -116,6 +144,9 @@ class App {
     const parts = [`Row ${h.row}, column ${h.col}`];
     if (s) parts.push(`${s.kind} (${structureToken(s)})`);
     if (item) parts.push(`holding ${itemName(item)}`);
+    if (s?.kind === 'bowl') parts.push(this.catSeat() >= 0 ? 'the cat wants warm milk here on ticks 10 to 1' : 'the cat is not asking yet');
+    const cat = this.catAt();
+    if (cat.row === h.row && cat.col === h.col) parts.push(`${this.shop.catName || 'your cat'} (click to name or pet)`);
     const ro = this.readouts.get(i);
     if (s?.kind === 'kettle' && ro) parts.push(`last input landed on tick ${ro.tick}${ro.roast ? `: ${ro.roast}` : ''}`);
     return parts.join(' · ');
@@ -141,16 +172,20 @@ class App {
       editor: this.editor,
       hover: this.hover,
       readouts: this.readouts,
-      stools: this.shop.seats().map((seat, i) => ({
-        col: seat.col,
-        label: shortName(this.shop.defs[i].name).slice(0, 2),
-        // The floor shows the tick just run, so presence is read for that tick.
-        present: this.shop.T > 0 && isPresent(seat, this.shop.T - 1),
-        servedNow: this.shop.lastEvents.some((e) => e.type === 'serve' && e.seat === i),
-        status: this.shop.regulars[i].status,
-      })),
+      stools: this.shop
+        .seats()
+        .map((seat, i) => ({ seat, i }))
+        .filter(({ seat }) => seat.bowl === undefined)
+        .map(({ seat, i }) => ({
+          col: seat.col,
+          label: shortName(this.shop.defs[i].name).slice(0, 2),
+          // The floor shows the tick just run, so presence is read for that tick.
+          present: this.shop.T > 0 && isPresent(seat, this.shop.T - 1),
+          servedNow: this.shop.lastEvents.some((e) => e.type === 'serve' && e.seat === i),
+          status: this.shop.regulars[i].status,
+        })),
       shelf: this.shop.shelf,
-      cat: catSpot(Math.max(0, this.shop.T - 1)),
+      cat: { spot: this.catAt(), heart: this.catCard.heart, mad: this.catMad() },
     };
     draw(this.ctx, view);
     const rights = this.shop.rights();

@@ -9,7 +9,8 @@ import { parseLayout } from '../../src/sim/text';
 describe('Counter strip', () => {
   it('reads Just in Time, within grace and the cups on each tile from steady state', () => {
     const layout = parseLayout(REFERENCE_LAYOUTS.find((r) => r.id === 'all-four')!.rows);
-    const strip = counterStrip(layout, REGULARS.map(seatFor), REGULARS)!;
+    const four = REGULARS.slice(0, 4);
+    const strip = counterStrip(layout, four.map(seatFor), four)!;
     const byId = (id: string) => strip.find((c) => c.stool?.def.id === id)!;
     expect(byId('lamplighter').stool).toMatchObject({ result: 'grace', tick: 7, item: { kind: 'coffee', roast: 'medium' } });
     expect(byId('sweep').stool).toMatchObject({ result: 'grace', tick: 11, item: { kind: 'coffee', roast: 'dark' } });
@@ -22,7 +23,8 @@ describe('Counter strip', () => {
   });
 
   it('reads a miss when nothing arrives', () => {
-    const strip = counterStrip(emptyLayout(6), REGULARS.map(seatFor), REGULARS)!;
+    const four = REGULARS.slice(0, 4);
+    const strip = counterStrip(emptyLayout(6), four.map(seatFor), four)!;
     expect(strip.filter((c) => c.stool).map((c) => c.stool!.result)).toEqual(['miss', 'miss', 'miss', 'miss']);
   });
 });
