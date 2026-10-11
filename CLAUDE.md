@@ -50,3 +50,4 @@ A browser puzzle-automation game for a two-week game jam: a cozy alchemical coff
 
 - Commit after each passing step with a short message.
 - Do not push or deploy unless asked.
+- Pushing to the `release` branch deploys the site to GitHub Pages (`.github/workflows/pages.yml`). Ship with `git push origin master:release`.
