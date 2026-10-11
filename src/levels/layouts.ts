@@ -37,7 +37,7 @@ export const REFERENCE_LAYOUTS: ReferenceLayout[] = [
     // South plot: beans land on 4 (medium), join row 0, slot 7; the lamplighter on stool 4 takes it on 11.
     id: 'lamplighter',
     serves: ['lamplighter'],
-    justInTime: [],
+    justInTime: ['lamplighter'],
     boughtRows: 0,
     rows: [E, E, B, E, 'F . . W . . . . . . . .', 'F < K< P< . . . . . . . .'],
   },
@@ -45,7 +45,7 @@ export const REFERENCE_LAYOUTS: ReferenceLayout[] = [
     // North plot: beans land on 8 (dark), join row 3, slot 1; the sweep on stool 11 takes it on 0.
     id: 'sweep',
     serves: ['sweep'],
-    justInTime: [],
+    justInTime: ['sweep'],
     boughtRows: 0,
     rows: [E, E, 'F K< < < < . . . . B . .', 'F . . P> ^ . . . . . . .', 'F . . W . . . . . . . .', E],
   },
@@ -69,7 +69,7 @@ export const REFERENCE_LAYOUTS: ReferenceLayout[] = [
     // The addendum's layout for places 1 to 4: one well, one line per side.
     id: 'all-four',
     serves: ['lamplighter', 'sweep', 'clockmaker', 'gargoyle'],
-    justInTime: ['clockmaker', 'gargoyle'],
+    justInTime: ['lamplighter', 'sweep', 'clockmaker', 'gargoyle'],
     boughtRows: 0,
     rows: [
       'F . . . . . . . . . . .',
@@ -205,7 +205,20 @@ export const REFERENCE_LAYOUTS: ReferenceLayout[] = [
       'innkeeper',
       'mayor',
     ],
-    justInTime: ['clockmaker', 'gargoyle', 'postwoman', 'baker', 'apothecary', 'witch', 'alchemist', 'cat', 'innkeeper', 'mayor'],
+    justInTime: [
+      'lamplighter',
+      'sweep',
+      'clockmaker',
+      'gargoyle',
+      'postwoman',
+      'baker',
+      'apothecary',
+      'witch',
+      'alchemist',
+      'cat',
+      'innkeeper',
+      'mayor',
+    ],
     boughtRows: 6,
     settlesWithin: 5,
     rows: [

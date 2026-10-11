@@ -8,16 +8,16 @@ export const REGULARS: RegularDef[] = [
   {
     id: 'lamplighter',
     name: 'The lamplighter',
-    intro: 'Up before the lamps go out. Anything medium, whenever it is ready.',
+    intro: 'Up before the lamps go out. Medium, on the eleventh tick, as the last lamp gutters.',
     col: 4,
-    order: { drink: 'coffee', roast: 'medium', tick: 'any' },
+    order: { drink: 'coffee', roast: 'medium', tick: 11 },
   },
   {
     id: 'sweep',
     name: 'The chimney sweep',
-    intro: 'Something as dark as a flue, please. I am not particular about when.',
+    intro: 'Something as dark as a flue, please, as the loop turns over. Soot waits for no one.',
     col: 11,
-    order: { drink: 'coffee', roast: 'dark', tick: 'any' },
+    order: { drink: 'coffee', roast: 'dark', tick: 0 },
   },
   {
     id: 'clockmaker',

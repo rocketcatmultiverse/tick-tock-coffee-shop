@@ -65,10 +65,10 @@ describe('Reference layouts', () => {
     });
   }
 
-  it('the all-four layout: four serves a loop, two of them Just in Time, and no spills', () => {
+  it('the all-four layout: four serves a loop, all Just in Time, and no spills', () => {
     const { events, floor } = cycleOf('all-four');
     expect(events.filter((e) => e.type === 'serve').length, floor).toBe(4);
-    expect(events.filter((e) => e.type === 'serve' && e.justInTime).length, floor).toBe(2);
+    expect(events.filter((e) => e.type === 'serve' && e.justInTime).length, floor).toBe(4);
     expect(events.filter((e) => e.type === 'spill'), floor).toEqual([]);
     expect(events.filter((e) => e.type === 'end'), floor).toEqual([]);
   });

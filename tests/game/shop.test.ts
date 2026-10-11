@@ -49,8 +49,8 @@ describe('Shop', () => {
     const till = shop.till;
     const gears = shop.gears;
     run(shop, 12 * 5);
-    // Per loop: lamplighter 5, sweep 5, gargoyle 5 + 3; the clockmaker 2 gears.
-    expect(shop.till - till).toBe(5 * (5 + 5 + 8));
+    // Per loop, all Just in Time: lamplighter, sweep and gargoyle 5 + 3 each; the clockmaker 2 gears.
+    expect(shop.till - till).toBe(5 * (8 + 8 + 8));
     expect(shop.gears - gears).toBe(5 * 2);
   });
 
@@ -73,7 +73,9 @@ describe('Shop', () => {
   });
 
   it('an any-tick regular counts as waiting once 24 ticks have passed since their last cup', () => {
-    const shop = new Shop({ defs: REGULARS.slice(0, 1), debug: true });
+    // No regular on the ladder takes any tick now (Q64), but the rule still stands: an any-tick lamplighter.
+    const anyTick = { ...REGULARS[0], order: { ...REGULARS[0].order, tick: 'any' as const } };
+    const shop = new Shop({ defs: [anyTick], debug: true });
     shop.build(layoutChanges('all-four'));
     run(shop, 36);
     expect(shop.regulars[0].status).toBe('seated');

@@ -90,7 +90,7 @@ export interface RegularDef {
   order: {
     drink: Drink;
     roast: Roast | 'any';
-    tick: number | 'any'; // 'any' for the first two regulars; no grace (docs/QUESTIONS.md, Q61)
+    tick: number | 'any'; // the ladder gives everyone a set tick (Q64); 'any' is still supported. No grace (Q61)
     fussy?: boolean;
   };
   bowl?: boolean; // the cat: served at its bowl in the back room, not at a stool

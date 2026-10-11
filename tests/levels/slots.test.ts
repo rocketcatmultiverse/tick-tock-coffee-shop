@@ -17,8 +17,8 @@ describe('Slots', () => {
   it('match the ladder table: place, stool column, tick and slot', () => {
     const table = REGULARS.map((d) => [d.id, d.bowl ? 'bowl' : d.col, d.order.tick, d.bowl || d.order.tick === 'any' ? null : slot(d)]);
     expect(table).toEqual([
-      ['lamplighter', 4, 'any', null],
-      ['sweep', 11, 'any', null],
+      ['lamplighter', 4, 11, 7],
+      ['sweep', 11, 0, 1],
       ['clockmaker', 0, 9, 9],
       ['gargoyle', 6, 11, 5],
       ['postwoman', 3, 3, 0],
@@ -30,6 +30,12 @@ describe('Slots', () => {
       ['innkeeper', 8, 4, 8],
       ['mayor', 1, 11, 10],
     ]);
+  });
+
+  it('every regular on the ladder wants a set tick, and slot 3 is the only one nobody wants (Q64)', () => {
+    expect(REGULARS.filter((d) => d.order.tick === 'any').map((d) => d.id)).toEqual([]);
+    const free = Array.from({ length: 12 }, (_, k) => k).filter((k) => !timed.some((d) => slot(d) === k));
+    expect(free).toEqual([3]);
   });
 
   it('every timed counter regular wants a different slot', () => {

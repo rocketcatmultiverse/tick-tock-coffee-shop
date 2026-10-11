@@ -277,7 +277,7 @@ compared on tick 0, where the counts restart. `stateKey` in `src/sim/steady.ts`.
 **Q45. "The same drink" for any-tick seating.** *Assumed:* the same drink and
 roast, since a regular only takes their own roast. The lamplighter (medium)
 sits right of the clockmaker and the postwoman; the sweep (dark) right of the
-gargoyle. `tests/levels/slots.test.ts`.
+gargoyle. `tests/levels/slots.test.ts`. *Superseded: no regular on the ladder takes any tick now (Q64).*
 
 **Q46. The cat's `col`.** `RegularDef` needs one, and the ladder table says "at
 its bowl". *Assumed:* the bowl's column, 9. Nothing reads it.
@@ -456,4 +456,20 @@ the right with tabs for less frequent things, and the clock top right.
 At 1920 by 960 (a 1080p screen less the browser's bars) the twelve-row
 all-twelve layout fits with no camera movement. `src/ui/geometry.ts`,
 `src/ui/input.ts`, `src/ui/main.ts`.
+
+**Q64. No any-tick regulars on the ladder.** *Your decision, from
+play-testing:* adapting a design late, when the floor is boxed in, to an
+any-tick regular whose cup was taken by a newcomer was more annoying than
+early flexibility was worth. The lamplighter and the sweep now want set ticks,
+in the two open slots their usual lines already land on:
+- the lamplighter: medium coffee on tick 11 at stool 4, slot 7. That is the
+  plainest first line: well, plot, kettle and one belt into feeder row 0;
+- the sweep: dark coffee on tick 0 at stool 11, slot 1.
+Slot 3 is now the only slot nobody wants. Both are served Just in Time like
+everyone else, so they pay the bonus too. Their intros name their ticks. This
+overrides Spec 5's "any tick" and Rules 5's first two regulars, and the
+addendum's "Free; 7 expected" and "1 or 3 expected". Every reference layout
+already put their cups in those slots, so none changed. The simulator and
+the game still support `tick: 'any'` (its rule tests stand); no regular
+uses it. `src/levels/regulars.ts`.
 
