@@ -232,6 +232,7 @@ export function keysPane(): HTMLElement[] {
         'Ctrl+Z undo · Ctrl+Y redo',
         'Space pause · . step one tick',
         'Right-drag, middle-drag or the mouse wheel: look around a tall floor',
+        'Splitter edges: yellow outputs, green where the next item goes, red where it would spill',
       ].map((t) => el('li', {}, t)),
     ),
     el(

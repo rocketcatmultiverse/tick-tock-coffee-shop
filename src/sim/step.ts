@@ -351,6 +351,51 @@ export function splitterOutputs(layout: Layout, at: number): Dir[] {
 }
 
 /**
+ * The output the next item to leave the splitter at `at` goes to, or null
+ * when nothing beside it takes items (the item spills). The round counts
+ * every item that has passed since tick 0, whatever it was, and starts again
+ * on tick 0. For the floor's highlight; `step` applies the same rule.
+ */
+export function splitterNext(layout: Layout, state: SimState, at: number): Dir | null {
+  const outs = splitterOutputs(layout, at);
+  if (outs.length === 0) return null;
+  const passed = clockTick(state.T) === 0 ? 0 : (state.splitters[at] ?? 0);
+  return outs[passed % outs.length];
+}
+
+/**
+ * Whether a tile can ever take `item`: anything belt-shaped takes anything; a
+ * machine takes only what it can use (a mixer still spills a lone ingredient,
+ * and the bowl warm milk when the cat is away); bare floor, wells and the side
+ * door take nothing.
+ */
+export function canTake(s: Structure | null, item: Item): boolean {
+  if (!s) return false;
+  switch (s.kind) {
+    case 'belt':
+    case 'launch':
+    case 'catch':
+    case 'feeder':
+    case 'spring':
+    case 'splitter':
+      return true;
+    case 'plot':
+      return item.kind === 'water';
+    case 'kettle':
+      return brew(item, 0) !== null;
+    case 'roaster':
+      return item.kind === 'beans';
+    case 'mixer':
+      return item.kind === 'milk' || item.kind === 'coffee' || item.kind === 'espresso';
+    case 'bowl':
+      return item.kind === 'warmMilk';
+    case 'well':
+    case 'door':
+      return false;
+  }
+}
+
+/**
  * What a kettle makes of an input landing on clock tick `t`, or null if it
  * cannot use it. Plain beans take their roast from the tick; espresso beans
  * keep theirs; milk becomes warm milk on any tick.

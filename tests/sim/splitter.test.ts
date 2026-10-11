@@ -6,7 +6,9 @@
 
 import { describe, expect, it } from 'vitest';
 import { tileIndex } from '../../src/sim/grid';
-import type { Item } from '../../src/sim/types';
+import type { Item, Structure } from '../../src/sim/types';
+import { canTake, splitterNext } from '../../src/sim/step';
+import { parseLayout } from '../../src/sim/text';
 import { EMPTY, eventsOf, floor, runTo, start, tick } from '../helpers';
 
 const IN = tileIndex(2, 4); // a belt pointing east into the splitter
@@ -148,5 +150,81 @@ describe('Splitter', () => {
     const spills = eventsOf(tick(run), 'spill');
     expect(run.state.belts[SPLIT], floor(run)).toEqual({ kind: 'water' });
     expect(spills.map((e) => e.item), floor(run)).toEqual([{ kind: 'beans' }]);
+  });
+});
+
+// What the splitter will do next, for the floor's highlight: which output the
+// next item leaving it goes to, and whether the piece there can take that item.
+describe('Splitter, looking ahead', () => {
+  it('names the output the next item goes to, following the round and its restart on tick 0', () => {
+    const run = around('^', '>', 'v');
+    expect(splitterNext(run.layout, run.state, SPLIT)).toBe('N');
+    // Two items pass, north then east: the next goes south.
+    for (const item of ITEMS.slice(0, 2)) {
+      run.state.belts[IN] = item;
+      tick(run);
+    }
+    runTo(run, 5);
+    expect(splitterNext(run.layout, run.state, SPLIT)).toBe('S');
+    // The tick about to run is tick 0: the round starts again at the top.
+    runTo(run, 12);
+    expect(splitterNext(run.layout, run.state, SPLIT)).toBe('N');
+  });
+
+  it('agrees with where items really go', () => {
+    const run = around('^', '>', 'v');
+    for (let T = 0; T < 30; T++) {
+      if (T % 2 === 0) run.state.belts[IN] = { kind: 'beans' };
+      const leaving = run.state.belts[SPLIT];
+      const next = splitterNext(run.layout, run.state, SPLIT);
+      tick(run);
+      if (!leaving) continue;
+      const at = { N, E, S }[next as 'N' | 'E' | 'S'];
+      expect(run.state.belts[at], `T=${T}${floor(run)}`).toEqual(leaving);
+    }
+  });
+
+  it('has no next output when nothing beside it takes items', () => {
+    const run = around('.', '.', '.');
+    expect(splitterNext(run.layout, run.state, SPLIT)).toBeNull();
+  });
+
+  it('knows which pieces can ever take an item: anything a machine cannot use spills', () => {
+    const machines: Structure[] = [
+      { kind: 'plot', out: 'N' },
+      { kind: 'kettle', out: 'N' },
+      { kind: 'roaster', out: 'N' },
+      { kind: 'mixer', out: 'N' },
+      { kind: 'bowl' },
+      { kind: 'well' },
+      { kind: 'door' },
+    ];
+    const items: Item[] = [
+      { kind: 'water' },
+      { kind: 'beans' },
+      { kind: 'milk' },
+      { kind: 'warmMilk' },
+      { kind: 'coffee', roast: 'dark' },
+      { kind: 'espresso', roast: 'dark' },
+      { kind: 'espressoBeans', roast: 'dark' },
+      { kind: 'latte', roast: 'dark' },
+    ];
+    for (const m of machines) {
+      for (const item of items) {
+        if (canTake(m, item)) continue;
+        // Something it can never take spills the moment it lands, whatever else happens.
+        const layout = parseLayout([EMPTY, '. . . . > . . . . . . .', EMPTY]);
+        layout.tiles[tileIndex(1, 5)] = m;
+        const run = start(layout, [], 3);
+        run.state.belts[tileIndex(1, 4)] = item;
+        const spills = eventsOf(tick(run), 'spill');
+        expect(spills.map((e) => [e.at, e.item]), `${m.kind} takes ${item.kind}`).toContainEqual([tileIndex(1, 5), item]);
+      }
+    }
+    // Belts and the like take anything; bare floor takes nothing.
+    expect(canTake({ kind: 'belt', dir: 'N' }, { kind: 'latte', roast: 'dark' })).toBe(true);
+    expect(canTake(null, { kind: 'water' })).toBe(false);
+    expect(canTake({ kind: 'kettle', out: 'N' }, { kind: 'milk' })).toBe(true);
+    expect(canTake({ kind: 'plot', out: 'N' }, { kind: 'milk' })).toBe(false);
   });
 });

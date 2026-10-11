@@ -481,3 +481,17 @@ The postwoman still brings the second well. No reference layout changed: a
 layout may only use pieces unlocked by its place, and the spring is now
 available earlier, never later. `src/levels/regulars.ts`.
 
+**Q66. A splitter's round and the tick-0 restart.** *Finding, from your save:*
+splitters work as the addendum says. Each item goes to the next output
+clockwise from the top, counting every item since tick 0, and the round
+restarts on tick 0. In your layout pails 2 and 3 reach the second splitter on
+ticks 11 and 0, either side of the restart. So in the first loop both go north;
+from then on pail 3 restarts the round on tick 0 (north) and pail 2, on tick
+11, is that round's second item (west). For a fixed split, items that should
+share a round must pass the splitter within one loop of the clock. *Added:* the
+floor marks each splitter's sides (yellow for outputs, green for where the next
+item goes, red where the item on it would spill), and hovering one names its
+outputs in order, how many items passed since tick 0, and where the next goes.
+`splitterNext` and `canTake` in `src/sim/step.ts` give the renderer the
+simulator's own answer.
+

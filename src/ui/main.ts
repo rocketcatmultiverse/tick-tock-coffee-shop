@@ -1,5 +1,5 @@
 import './style.css';
-import { counterIndex, feederSlot, isPresent, itemName, slotOf, structureToken, tileIndex } from '../sim';
+import { clockTick, counterIndex, feederSlot, isPresent, itemName, slotOf, splitterNext, splitterOutputs, structureToken, tileIndex } from '../sim';
 import { MILK_TICK } from '../sim/tuning';
 import type { Layout, Roast } from '../sim/types';
 import { ALL_PIECES } from '../game/pieces';
@@ -223,11 +223,22 @@ class App {
     if (item) parts.push(`holding ${itemName(item)}`);
     if (s?.kind === 'bowl') parts.push(this.catSeat() >= 0 ? 'the cat wants warm milk here on tick 10' : 'the cat is not asking yet');
     if (s?.kind === 'feeder') parts.push(`the only way onto the counter; slot ${feederSlot(this.shop.T - 1, h.row)} is passing`);
+    if (s?.kind === 'splitter') parts.push(this.splitterInfo(i));
     const cat = this.catAt();
     if (cat.row === h.row && cat.col === h.col) parts.push(`${this.shop.catName || 'your cat'} (click to name or pet)`);
     const ro = this.readouts.get(i);
     if (s?.kind === 'kettle' && ro) parts.push(`last input landed on tick ${ro.tick}${ro.roast ? `: ${ro.roast}` : ''}`);
     return parts.join(' · ');
+  }
+
+  /** A splitter's round: its outputs in order, what has passed since tick 0, and where the next item goes. */
+  private splitterInfo(i: number): string {
+    const name = { N: 'north', E: 'east', S: 'south', W: 'west' } as const;
+    const outs = splitterOutputs(this.shop.layout, i);
+    if (outs.length === 0) return 'no outputs: whatever lands here spills';
+    const passed = clockTick(this.shop.T) === 0 ? 0 : (this.shop.sim.splitters[i] ?? 0);
+    const next = splitterNext(this.shop.layout, this.shop.sim, i)!;
+    return `outputs ${outs.map((d) => name[d]).join(', ')}, in that order; ${passed} item${passed === 1 ? '' : 's'} passed since tick 0, whatever they were; the next goes ${name[next]}`;
   }
 
   /** What the counter strip says about the stool in column `col`. */

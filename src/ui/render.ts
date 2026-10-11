@@ -6,8 +6,8 @@
 // edge and the stool band (which carries the counter strip) stay pinned to
 // the bottom.
 
-import type { Item, Roast, Structure } from '../sim/types';
-import { clockTick, colOf, feederSlot, isCounter, rowOf, slotOf, tileIndex } from '../sim';
+import type { Dir, Item, Roast, Structure } from '../sim/types';
+import { canTake, clockTick, colOf, feederSlot, isCounter, rowOf, slotOf, splitterNext, splitterOutputs, stepFrom, tileIndex } from '../sim';
 import { COLS, GROWTH } from '../sim/tuning';
 import type { Shop } from '../game/shop';
 import type { StoolResult } from '../game/strip';
@@ -171,6 +171,7 @@ export function draw(ctx: CanvasRenderingContext2D, view: View): void {
       if (s.kind === 'spring' && inside) tag(ctx, `${inside}`, x + T - 18, y + 2, PAL.cream);
       const pend = sim.pending[i];
       if (pend) blit(ctx, view, itemKey(pend.item), x + T * 0.5, y - T * 0.08, T * 0.55);
+      if (s.kind === 'splitter') drawSplitterEdges(ctx, view, i, x, y);
     }
   }
   drawChutes(ctx, view);
@@ -219,6 +220,46 @@ export function draw(ctx: CanvasRenderingContext2D, view: View): void {
 
   drawCameraHints(ctx, view);
   drawEditing(ctx, view, editor);
+}
+
+const SPLIT_OUT = PAL.gold;
+const SPLIT_NEXT = '#7cd65a';
+const SPLIT_SPILL = PAL.cherry;
+
+/**
+ * A splitter's sides: yellow for its outputs, green for where the next item
+ * goes, red for a side that would spill the item now on it (or the whole rim
+ * when nothing beside it takes items). Read from the simulator's own rules.
+ */
+function drawSplitterEdges(ctx: CanvasRenderingContext2D, view: View, i: number, x: number, y: number): void {
+  const { layout, sim } = view.shop;
+  const T = view.geo.tile;
+  const outs = splitterOutputs(layout, i);
+  const next = splitterNext(layout, sim, i);
+  const waiting = sim.belts[i];
+  const bar = (d: Dir, color: string) => {
+    const t = Math.max(4, Math.round(T * 0.09));
+    const len = Math.round(T * 0.56);
+    const off = (T - len) / 2;
+    const r =
+      d === 'N' ? [x + off, y + 2, len, t] : d === 'S' ? [x + off, y + T - 2 - t, len, t] : d === 'W' ? [x + 2, y + off, t, len] : [x + T - 2 - t, y + off, t, len];
+    ctx.fillStyle = color;
+    ctx.strokeStyle = PAL.ink;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(r[0], r[1], r[2], r[3], t / 2);
+    ctx.fill();
+    ctx.stroke();
+  };
+  if (outs.length === 0) {
+    if (waiting) for (const d of ['N', 'E', 'S', 'W'] as Dir[]) bar(d, SPLIT_SPILL);
+    return;
+  }
+  for (const d of outs) {
+    const j = stepFrom(layout, i, d);
+    const spills = !!waiting && d === next && !canTake(j === null ? null : layout.tiles[j] ?? null, waiting);
+    bar(d, spills ? SPLIT_SPILL : d === next ? SPLIT_NEXT : SPLIT_OUT);
+  }
 }
 
 function drawChutes(ctx: CanvasRenderingContext2D, view: View): void {
