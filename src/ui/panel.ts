@@ -215,7 +215,11 @@ export class Tabs {
     this.select(tabs[0].id);
   }
 
+  /** The tab showing. */
+  current = '';
+
   select(id: string): void {
+    this.current = id;
     for (const [k, b] of this.buttons) b.classList.toggle('active', k === id);
     for (const [k, p] of this.panes) p.hidden = k !== id;
   }

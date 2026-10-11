@@ -17,6 +17,8 @@ export function readSave(defs: readonly RegularDef[], debug: boolean): { shop: S
 }
 
 export function writeSave(shop: Shop): void {
+  // Someone else's shop, opened from a share link, is never saved: it would overwrite the player's own.
+  if (shop.visiting) return;
   try {
     const save: Save = saveShop(shop, Date.now());
     window.localStorage.setItem(keyFor(shop.debug), JSON.stringify(save));

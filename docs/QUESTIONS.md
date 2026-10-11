@@ -528,3 +528,39 @@ checked against the simulator on every tick of the clock
 (`tests/game/recipes.test.ts`). `src/game/recipes.ts`, `src/ui/tips.ts`,
 `src/ui/tooltip.ts`, `src/ui/hotkeys.ts`.
 
+**Q68. Sharing a shop by link.** *Your request, on the share-solution branch:*
+name your shop and make a share link under the Shop tab; a player who is
+behind the shared shop is warned of spoilers and may go on anyway; the shared
+shop plays but never overwrites the player's save and is never saved; a button
+returns to their own shop at any time; the link shows rows bought, solution
+cost and regulars happy. *Done as:*
+- the link carries the shop in its fragment (`#name=...&floor=...`), since the
+  site has no backend: the shop and cat names, regulars walked in, till,
+  gears, and the floor at one character a tile. Not carried: loyalty,
+  statuses (everyone starts seated) and happiness, which is earned again, as
+  after a load (Q62). The shop name is kept in the save; older saves have none;
+- *assumed, solution cost:* every piece on the floor at its price, plus every
+  row bought at the row price. It is what the floor costs to build from
+  scratch, with full refunds (Spec 4) making it the same however you got there;
+- *assumed, regulars happy:* regulars the floor serves on every loop of its
+  steady state, with the whole milk order paid for, as the counter strip
+  reads it. Not the live count in the till card, which starts again from 0 on
+  every load, so a link made just after a load would undersell the floor.
+  Both sides count from the floor itself;
+- *assumed, behind:* fewer regulars walked in than the shared shop, or as many
+  and fewer of them happy in steady state. A player with no save counts as a
+  new shop. The warning names no regulars and shows nothing of the floor;
+- *assumed, the embed:* a static page cannot give each link its own preview
+  card, since chat apps read one `index.html` for every link. So the three
+  numbers are written near the start of the link itself
+  (`happy=12-of-12&rows=6&cost=982`), and "Copy with scores" copies them as a
+  sentence before the link. Opening a link ignores the numbers it claims and
+  counts again;
+- a visit can be played and built on, with the sharer's till; "Start a new
+  shop" is not offered there. `writeSave` refuses a visiting shop as well, so
+  no path can write one over the player's save (`tests/ui/storage.test.ts`).
+  "Back to my shop" drops the link and reopens the page, so the visit counts
+  as time away for the morning report. Opening the link again opens the
+  shared shop again.
+`src/game/share.ts`, `src/ui/share.ts`, `src/ui/main.ts`, `src/ui/storage.ts`.
+

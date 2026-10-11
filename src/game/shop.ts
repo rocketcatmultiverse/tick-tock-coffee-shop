@@ -25,6 +25,8 @@ import {
 export interface ShopOptions {
   defs: readonly RegularDef[];
   debug?: boolean;
+  /** Opened from someone's share link: it plays, and it is never saved. */
+  visiting?: boolean;
 }
 
 export interface TickReport {
@@ -36,12 +38,16 @@ export interface TickReport {
 export class Shop {
   readonly defs: readonly RegularDef[];
   readonly debug: boolean;
+  /** Someone else's shop, opened from a share link. Never saved. */
+  readonly visiting: boolean;
   layout: Layout;
   sim: SimState;
   till: number;
   gears = 0;
   /** Chosen by the player; empty until then. */
   catName = '';
+  /** The name a share link gives the shop; chosen by the player, empty until then. */
+  shopName = '';
   /** Regulars who have walked in, in order. The last one may still be new. */
   regulars: RegularState[] = [];
   /** Spills counted on the current loop and on the last full loop. */
@@ -61,6 +67,7 @@ export class Shop {
   constructor(opts: ShopOptions) {
     this.defs = opts.defs;
     this.debug = !!opts.debug;
+    this.visiting = !!opts.visiting;
     this.layout = startLayout(START_ROWS);
     this.till = this.debug ? DEBUG_COINS : START_COINS;
     this.sim = emptyState(this.layout, 0);
@@ -68,11 +75,12 @@ export class Shop {
   }
 
   /** Put back a saved shop: layout, books and regulars. The floor starts empty, on tick 0. */
-  restore(saved: { layout: Layout; till: number; gears: number; catName: string; regulars: RegularState[] }): void {
+  restore(saved: { layout: Layout; till: number; gears: number; catName: string; shopName?: string; regulars: RegularState[] }): void {
     this.layout = saved.layout;
     this.till = saved.till;
     this.gears = saved.gears;
     this.catName = saved.catName;
+    this.shopName = saved.shopName ?? '';
     this.regulars = saved.regulars.map((r) => ({ ...r }));
     this.visitServed = this.regulars.map(() => false);
     // Happiness is not saved: after a load everyone earns it again (docs/QUESTIONS.md, Q62).

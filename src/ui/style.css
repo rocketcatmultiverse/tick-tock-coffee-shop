@@ -575,6 +575,49 @@ details > summary {
   width: 160px;
 }
 
+/* ---- Sharing ----------------------------------------------------------------------- */
+
+.share-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.share-link {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Visiting someone else's shop: their name, their numbers and the way back. */
+.card.visit {
+  border-color: var(--gold);
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.visit-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.visit-top .card-name {
+  color: var(--gold);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.visit-top button {
+  flex: none;
+}
+
+.report .row {
+  justify-content: flex-end;
+}
+
 /* ---- The morning report ------------------------------------------------------------ */
 
 .overlay {

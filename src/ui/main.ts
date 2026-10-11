@@ -4,6 +4,7 @@ import { MILK_TICK } from '../sim/tuning';
 import type { Layout, Roast } from '../sim/types';
 import { ALL_PIECES } from '../game/pieces';
 import { applyOffline } from '../game/offline';
+import { type ShopStats, decodeShare, isBehind, progressOf, shopStats, shopTitle, visitShop } from '../game/share';
 import { Shop } from '../game/shop';
 import { type StripCell, counterStrip } from '../game/strip';
 import { HAPPY_LOOPS } from '../game/tuning';
@@ -19,6 +20,7 @@ import { el } from './el';
 import { Panel, Tabs, keysPane } from './panel';
 import { showMorningReport } from './morningReport';
 import { type StoolView, type View, draw } from './render';
+import { ShareCard, VisitBanner, leaveVisit, showSpoilerWarning } from './share';
 import { clearSave, readSave, writeSave } from './storage';
 import { tipContent } from './tips';
 import { Tooltip } from './tooltip';
@@ -59,13 +61,24 @@ class App {
   });
   /** Steady state is recomputed only when the layout or the seats change. */
   private stripCache: { layout: Layout; seats: number; strip: StripCell[] | null } | null = null;
+  private statsCache: { layout: Layout; seats: number; stats: ShopStats } | null = null;
+  /** In the player's own shop: the Shop tab's share card. */
+  private shareCard: ShareCard | null = null;
+  /** In someone else's shop, opened from a share link: the banner with the way back. */
+  private visitBanner: VisitBanner | null = null;
 
   private resetting = false;
 
-  constructor(root: HTMLElement, debug: boolean) {
-    const loaded = readSave(REGULARS, debug);
-    this.shop = loaded?.shop ?? new Shop({ defs: REGULARS, debug });
-    this.notes.push(loaded ? 'Welcome back. The floor starts empty and fills again within a loop or two.' : `${REGULARS[0].name} walks in: "${REGULARS[0].intro}"`);
+  /**
+   * Opens the player's own shop from the save, or `visit`: someone else's shop
+   * from a share link, which plays as usual and is never saved.
+   */
+  constructor(root: HTMLElement, debug: boolean, visit: Shop | null = null, notice = '') {
+    const loaded = visit ? null : readSave(REGULARS, debug);
+    this.shop = visit ?? loaded?.shop ?? new Shop({ defs: REGULARS, debug });
+    if (visit) this.notes.push(`Visiting ${shopTitle(visit.shopName)}: the floor starts empty and fills within a loop or two. Nothing here is saved.`);
+    else this.notes.push(loaded ? 'Welcome back. The floor starts empty and fills again within a loop or two.' : `${REGULARS[0].name} walks in: "${REGULARS[0].intro}"`);
+    if (notice) this.notes.unshift(notice);
     const report = loaded ? applyOffline(this.shop, loaded.lastSeen, Date.now()) : null;
     this.editor = new Editor(this.shop);
     this.ctx = this.canvas.getContext('2d')!;
@@ -94,17 +107,23 @@ class App {
         this.render();
       },
     });
-    const fresh = el('button', { textContent: 'Start a new shop' });
-    fresh.onclick = () => this.startOver();
+    const catHint = el('p', { className: 'muted' }, 'Click your cat on the floor to name it or pet it.');
+    let shopPane: Node[];
+    if (visit) {
+      this.visitBanner = new VisitBanner(visit);
+      const note = 'You are visiting a shared shop. Sharing your own shop, or starting a new one, is done from your own shop.';
+      shopPane = [el('p', { className: 'muted' }, note), this.catCard.root, catHint];
+    } else {
+      this.shareCard = new ShareCard(this.shop, () => this.stats());
+      const fresh = el('button', { textContent: 'Start a new shop' });
+      fresh.onclick = () => this.startOver();
+      shopPane = [this.shareCard.root, this.catCard.root, catHint, fresh];
+    }
     this.tabs = new Tabs([
       { id: 'regulars', label: 'Regulars', content: [this.regularsPanel.list] },
       { id: 'log', label: 'Happenings', content: [this.regularsPanel.log] },
       { id: 'keys', label: 'Keys', content: keysPane() },
-      {
-        id: 'shop',
-        label: 'Shop',
-        content: [this.catCard.root, el('p', { className: 'muted' }, 'Click your cat on the floor to name it or pet it.'), fresh],
-      },
+      { id: 'shop', label: 'Shop', content: shopPane },
     ]);
     this.floorArea.append(this.canvas);
     root.append(
@@ -114,6 +133,7 @@ class App {
         'aside',
         { className: 'side' },
         el('h1', {}, 'Tick Tock Coffee Shop', debug ? el('span', { className: 'badge' }, 'debug') : ''),
+        this.visitBanner?.root ?? '',
         this.panel.clock,
         this.regularsPanel.next,
         this.tabs.root,
@@ -122,12 +142,15 @@ class App {
     bindInput(this.canvas, this);
     // The floor fills whatever room the panels leave it, and is redrawn when that changes.
     new ResizeObserver(() => this.render()).observe(this.floorArea);
-    this.save();
-    window.setInterval(() => this.save(), AUTOSAVE_MS);
-    window.addEventListener('pagehide', () => this.save());
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') this.save();
-    });
+    // A visit is never saved, so it can never overwrite the player's own shop.
+    if (!visit) {
+      this.save();
+      window.setInterval(() => this.save(), AUTOSAVE_MS);
+      window.addEventListener('pagehide', () => this.save());
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') this.save();
+      });
+    }
     if (report) {
       // The clock waits while the morning report is read.
       this.running = false;
@@ -141,10 +164,11 @@ class App {
   }
 
   private save(): void {
-    if (!this.resetting) writeSave(this.shop);
+    if (!this.resetting && !this.shop.visiting) writeSave(this.shop);
   }
 
   private startOver(): void {
+    if (this.shop.visiting) return;
     if (!window.confirm('Start a new shop? This clears the saved one.')) return;
     this.resetting = true;
     clearSave(this.shop.debug);
@@ -290,6 +314,16 @@ class App {
     return strip;
   }
 
+  /** Rows bought, cost and regulars kept happy: what a share link shows. */
+  private stats(): ShopStats {
+    const seats = this.shop.regulars.length;
+    const c = this.statsCache;
+    if (c && c.layout === this.shop.layout && c.seats === seats) return c.stats;
+    const stats = shopStats(this.shop.layout, seats, this.shop.defs);
+    this.statsCache = { layout: this.shop.layout, seats, stats };
+    return stats;
+  }
+
   private stools(): StoolView[] {
     const strip = this.strip();
     return this.shop
@@ -372,11 +406,39 @@ class App {
       this.shop.newcomer(),
       this.notes,
     );
+    this.visitBanner?.update(this.stats());
+    // The share card's numbers need steady state, so they are worked out only while it shows.
+    if (this.tabs.current === 'shop') this.shareCard?.update();
     this.tooltip.refresh();
   }
 }
 
-const debug = new URLSearchParams(location.search).has('debug');
-const app = new App(document.getElementById('app')!, debug);
-// Dev builds only: lets the console inspect the shop.
-if (import.meta.env.DEV) (window as unknown as { ticktock: App }).ticktock = app;
+/**
+ * Open the shop the URL names. A share link in the fragment opens someone
+ * else's shop as a visit; a player whose own shop is behind it is warned of
+ * spoilers first. Anything else opens the player's own shop.
+ */
+function open(root: HTMLElement, debug: boolean): void {
+  // Pasting another link into the address bar reopens the page on what it names.
+  window.addEventListener('hashchange', () => location.reload());
+  const fragment = location.hash.slice(1);
+  const shared = fragment ? decodeShare(fragment, REGULARS) : null;
+  const start = (visit: Shop | null, notice = '') => {
+    const app = new App(root, debug, visit, notice);
+    // Dev builds only: lets the console inspect the shop.
+    if (import.meta.env.DEV) (window as unknown as { ticktock: App }).ticktock = app;
+  };
+  if (!shared) {
+    if (!fragment) return start(null);
+    // A link that does not open a shop: drop it, and open the player's own.
+    history.replaceState(null, '', location.pathname + location.search);
+    return start(null, 'That share link could not be opened, so here is your own shop.');
+  }
+  const visit = visitShop(shared, REGULARS, debug)!;
+  const stats = shopStats(shared.layout, shared.walkedIn, REGULARS);
+  const own = progressOf(readSave(REGULARS, debug)?.shop ?? null, REGULARS);
+  if (!isBehind(own, stats)) return start(visit);
+  showSpoilerWarning(shared.name, stats, own, { open: () => start(visit), back: leaveVisit });
+}
+
+open(document.getElementById('app')!, new URLSearchParams(location.search).has('debug'));

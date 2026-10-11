@@ -13,6 +13,7 @@ export interface Save {
   layout: Layout;
   till: number;
   catName: string; // chosen by the player
+  shopName?: string; // chosen by the player, for share links; older saves have none
   gears: number; // paid by the clockmaker; buys nothing
   regulars: RegularState[];
   lastSeen: number; // epoch ms, read only by the game layer
@@ -24,16 +25,25 @@ export function saveShop(shop: Shop, now: number): Save {
     layout: { cols: 12, rows: shop.layout.rows, tiles: shop.layout.tiles.slice() },
     till: shop.till,
     catName: shop.catName,
+    shopName: shop.shopName,
     gears: shop.gears,
     regulars: shop.regulars.map((r) => ({ ...r })),
     lastSeen: now,
   };
 }
 
-/** Rebuild a shop from saved data, or null if the data is not a save this version understands. */
-export function loadShop(data: unknown, defs: readonly RegularDef[], debug = false): { shop: Shop; lastSeen: number } | null {
+/**
+ * Rebuild a shop from saved data, or null if the data is not a save this
+ * version understands. A visiting shop is someone else's, from a share link.
+ */
+export function loadShop(
+  data: unknown,
+  defs: readonly RegularDef[],
+  debug = false,
+  visiting = false,
+): { shop: Shop; lastSeen: number } | null {
   if (!isSave(data, defs)) return null;
-  const shop = new Shop({ defs, debug });
+  const shop = new Shop({ defs, debug, visiting });
   shop.restore(data);
   return { shop, lastSeen: data.lastSeen };
 }
@@ -81,6 +91,7 @@ function isSave(data: unknown, defs: readonly RegularDef[]): data is Save {
   if (!layout.tiles.every((t, i) => (t?.kind === 'feeder') === (i % COLS === 0))) return false;
   if (typeof d.till !== 'number' || !Number.isFinite(d.till)) return false;
   if (!isCount(d.gears) || typeof d.catName !== 'string' || typeof d.lastSeen !== 'number') return false;
+  if (d.shopName !== undefined && typeof d.shopName !== 'string') return false;
   const regs = d.regulars;
   if (!Array.isArray(regs) || regs.length > defs.length || (defs.length > 0 && regs.length === 0)) return false;
   return regs.every(
