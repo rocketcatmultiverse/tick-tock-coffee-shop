@@ -15,10 +15,13 @@ import { SpriteBank } from './art/raster';
 import { Editor } from './editor';
 import { Geometry, type Spot } from './geometry';
 import { bindInput } from './input';
-import { Panel, Tabs, el, keysPane } from './panel';
+import { el } from './el';
+import { Panel, Tabs, keysPane } from './panel';
 import { showMorningReport } from './morningReport';
 import { type StoolView, type View, draw } from './render';
 import { clearSave, readSave, writeSave } from './storage';
+import { tipContent } from './tips';
+import { Tooltip } from './tooltip';
 
 /** How often the shop is saved while open, in milliseconds. */
 const AUTOSAVE_MS = 2000;
@@ -44,6 +47,7 @@ class App {
   private panel: Panel;
   private tabs: Tabs;
   private regularsPanel = new RegularsPanel();
+  private tooltip = new Tooltip(tipContent);
   private notes: string[] = [];
   private catCard = new CatCard({
     getName: () => this.shop.catName,
@@ -368,6 +372,7 @@ class App {
       this.shop.newcomer(),
       this.notes,
     );
+    this.tooltip.refresh();
   }
 }
 

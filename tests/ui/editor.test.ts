@@ -112,6 +112,14 @@ describe('Editor', () => {
     expect(shop.layout.tiles[tileIndex(2, 6)]).toEqual({ kind: 'belt', dir: 'S' });
   });
 
+  it('a locked piece cannot be picked up, and what was in hand stays', () => {
+    const { ed } = setup();
+    ed.pick('belt');
+    ed.pick('roaster');
+    expect(ed.hand).toEqual({ type: 'piece', piece: 'belt', dir: 'E' });
+    expect(ed.message).toMatch(/not unlocked/i);
+  });
+
   it('the cat\'s bowl cannot be deleted', () => {
     const { shop, ed } = setup();
     ed.deleteKey(3, 9);

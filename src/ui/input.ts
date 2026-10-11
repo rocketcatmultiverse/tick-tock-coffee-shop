@@ -1,10 +1,12 @@
 // Mouse and keyboard, turned into editor calls (docs/SPEC.md, Spec 4,
 // "Editing keys"). Shift+drag box-selects so a plain drag still lays belts.
+// The number keys pick from the build palette (hotkeys.ts).
 // The camera: right-drag or middle-drag moves it, and so does the mouse wheel;
 // a right-click that does not move still puts down what is in hand.
 
 import type { Editor } from './editor';
 import type { Geometry, Spot } from './geometry';
+import { pieceForKey } from './hotkeys';
 
 export interface InputHost {
   editor: Editor;
@@ -142,6 +144,7 @@ export function bindInput(canvas: HTMLCanvasElement, host: InputHost): void {
     else if (key === 'escape') ed.putDown();
     else if (key === ' ') host.togglePause();
     else if (key === '.') host.stepOnce();
+    else if (!e.altKey && pieceForKey(key)) ed.pick(pieceForKey(key)!);
     else handled = false;
     if (handled) {
       e.preventDefault();

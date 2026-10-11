@@ -2,12 +2,20 @@
 // The card sits on the right under the clock; the list and the happenings are tabs.
 
 import type { RegularDef } from '../sim/types';
-import { describeOrder, type RegularState } from '../game/regulars';
+import { orderName, orderWhen, type RegularState } from '../game/regulars';
 import { HAPPY_LOOPS } from '../game/tuning';
 import { portraitImg } from './art/dom';
-import { el } from './panel';
+import { el } from './el';
+import { orderTipKey } from './tips';
 
 const seatName = (def: RegularDef) => (def.bowl ? 'at the bowl' : `stool ${def.col}`);
+
+/** The drink a regular orders, underlined: hovering it shows how it is made. */
+const drinkTip = (def: RegularDef) => {
+  const span = el('span', { className: 'tip', textContent: orderName(def) });
+  span.dataset.tip = orderTipKey(def.order.drink, def.order.roast);
+  return span;
+};
 
 /** Loops in a row with their cup, as filled pips out of HAPPY_LOOPS. */
 export function happyPips(loops: number): HTMLSpanElement {
@@ -43,7 +51,7 @@ export class RegularsPanel {
           { className: 'next-text' },
           el('div', { className: 'muted' }, 'Newest regular'),
           el('div', { className: 'card-name' }, newcomer.name),
-          el('div', { className: 'order' }, `${describeOrder(newcomer)} · ${seatName(newcomer)}`),
+          el('div', { className: 'order' }, drinkTip(newcomer), `${orderWhen(newcomer)} · ${seatName(newcomer)}`),
           el('div', { className: 'intro' }, `"${newcomer.intro}"`),
           el(
             'div',
@@ -77,7 +85,9 @@ export class RegularsPanel {
             el(
               'div',
               { className: 'muted' },
-              `${seatName(defs[i])}: ${describeOrder(defs[i])}. ${r.status}${r.loyalty ? `, served ${r.loyalty}` : ''}`,
+              `${seatName(defs[i])}: `,
+              drinkTip(defs[i]),
+              `${orderWhen(defs[i])}. ${r.status}${r.loyalty ? `, served ${r.loyalty}` : ''}`,
             ),
           ),
         ),

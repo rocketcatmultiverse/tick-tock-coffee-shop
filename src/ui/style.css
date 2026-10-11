@@ -316,7 +316,11 @@ button.piece {
   line-height: 1.05;
 }
 
-button.piece:hover:not(:disabled) {
+button.piece {
+  position: relative;
+}
+
+button.piece:hover:not(:disabled):not(.locked) {
   background: #ecd2ad;
 }
 
@@ -325,8 +329,50 @@ button.piece.active {
   box-shadow: 0 0 0 3px var(--gold);
 }
 
-button.piece:disabled {
-  opacity: 0.3;
+/* A piece not unlocked yet is only a question mark. */
+button.piece.locked {
+  background: var(--panel-deep);
+  color: var(--muted);
+  border-style: dashed;
+  cursor: default;
+}
+
+button.piece.locked:hover {
+  background: var(--panel-deep);
+}
+
+.piece-unknown {
+  font-family: var(--brush);
+  font-size: 40px;
+  line-height: 1;
+}
+
+/* The number key that picks the piece, top left. */
+.piece-key {
+  position: absolute;
+  top: 1px;
+  left: 6px;
+  font-size: 13px;
+  opacity: 0.65;
+}
+
+/* The mark that a piece has a tooltip, top right. */
+.piece-info {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 13px;
+  height: 13px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  font-size: 11px;
+  line-height: 13px;
+  text-align: center;
+  opacity: 0.65;
+}
+
+button.piece:hover .piece-info {
+  opacity: 1;
 }
 
 .piece-label {
@@ -558,4 +604,100 @@ details > summary {
 
 .report ul {
   color: var(--muted);
+}
+
+/* ---- Tooltips ---------------------------------------------------------------------- */
+
+/* Words with a tooltip: a dotted underline. */
+.tip {
+  text-decoration: underline dotted;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+  cursor: help;
+}
+
+.tooltip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 20;
+  box-sizing: border-box;
+  max-width: 400px;
+  padding: 10px 14px;
+  background: var(--panel);
+  border: 2.5px solid var(--gold);
+  border-radius: var(--sketch);
+  box-shadow: 0 6px 20px rgba(10, 6, 12, 0.55);
+  pointer-events: none;
+  font-size: 15px;
+  color: var(--cream);
+}
+
+.tip-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.tip-name {
+  font-family: var(--brush);
+  font-size: 24px;
+  line-height: 1.1;
+  color: var(--gold);
+}
+
+.tip-rules {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.tip-rules li {
+  margin: 3px 0;
+}
+
+/* A recipe as pictures: inputs + machine = what it makes. */
+.equation {
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  margin-top: 8px;
+}
+
+.equation.sub {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1.5px dashed rgba(233, 220, 198, 0.3);
+}
+
+.term {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 64px;
+}
+
+.term img {
+  background: var(--floor);
+  border-radius: 10px;
+}
+
+.term-name {
+  font-size: 13px;
+  line-height: 1.05;
+  color: var(--muted);
+  text-align: center;
+}
+
+.op {
+  align-self: flex-start;
+  font-family: var(--brush);
+  font-size: 22px;
+  line-height: 40px;
+  color: var(--gold);
+}
+
+.equation.sub .op {
+  line-height: 30px;
 }

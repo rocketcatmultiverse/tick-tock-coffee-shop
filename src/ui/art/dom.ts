@@ -1,6 +1,8 @@
 // Sprites for the side panel and the counter strip: the same SVG as the
 // floor, handed to the browser as images so they stay crisp at any size.
 
+import type { Roast } from '../../sim/types';
+import { tickRuns } from '../../game/recipes';
 import { LOOP } from '../../sim/tuning';
 import { roastForTick } from '../../sim/items';
 import { portraitBody } from './portraits';
@@ -33,6 +35,37 @@ export function portraitImg(id: string, size: number, className = 'portrait'): H
   img.className = className;
   img.alt = '';
   img.src = cached(`p:${id}:${size}`, () => svgUrl(svgDocument({ body: portraitBody(id), viewBox: 160, seed: 23 }, size * 2)));
+  return img;
+}
+
+/**
+ * A small clock in the kettle dial's style that shows only `ticks`, in the
+ * colour of `roast`: the ticks an input must land on to come out at that roast.
+ */
+export function clockWindowImg(ticks: readonly number[], roast: Roast, size: number): HTMLImageElement {
+  const img = new Image(size, size);
+  img.className = 'sprite';
+  img.alt = '';
+  img.src = cached(`c:${ticks.join(',')}:${roast}:${size}`, () => {
+    const at = (t: number, r: number) => {
+      const a = (t / LOOP) * Math.PI * 2 - Math.PI / 2;
+      return `${(30 + Math.cos(a) * r).toFixed(2)} ${(30 + Math.sin(a) * r).toFixed(2)}`;
+    };
+    const marks = Array.from({ length: LOOP }, (_, k) => `M${at(k, 19)}L${at(k, 23)}`).join('');
+    // A wedge per run of ticks, from the centre to the rim, so it reads at icon size.
+    const windows = tickRuns(ticks)
+      .map(([a, b]) => {
+        const to = b >= a ? b + 1 : b + 1 + LOOP;
+        return `<path d="M30 30L${at(a, 23)}A23 23 0 ${to - a > LOOP / 2 ? 1 : 0} 1 ${at(to, 23)}z" fill="${ROAST_WINDOW[roast]}" stroke-width="1.5"/>`;
+      })
+      .join('');
+    const body =
+      `<circle cx="30" cy="30" r="26" fill="${PAL.cream}" stroke="${PAL.gold}" stroke-width="3"/>` +
+      windows +
+      `<path d="${marks}" stroke="${PAL.ink}" stroke-width="2"/>` +
+      `<circle cx="30" cy="30" r="3" fill="${PAL.ink}"/>`;
+    return svgUrl(svgDocument({ body, viewBox: 60, seed: 4 }, size * 2));
+  });
   return img;
 }
 

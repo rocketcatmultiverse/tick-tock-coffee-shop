@@ -1,7 +1,7 @@
 // The small card that opens when you click the cat: name it or pet it.
 // Its moods are cosmetic, so they use Math.random here in the UI.
 
-import { el } from './panel';
+import { el } from './el';
 
 /** Chance that the cat simply does not care for your affection. */
 const INDIFFERENT = 0.3;

@@ -36,11 +36,17 @@ const DRINK_NAME: Record<Drink, string> = {
   latte: 'latte',
 };
 
-/** "Medium coffee, tick 9 (slot 9)" and the like. */
-export function describeOrder(def: RegularDef): string {
+/** "Medium coffee", "Warm milk": the drink a regular orders. */
+export function orderName(def: RegularDef): string {
   const o = def.order;
-  const what = `${o.roast === 'any' ? '' : o.roast[0].toUpperCase() + o.roast.slice(1) + ' '}${DRINK_NAME[o.drink]}`;
+  const name = `${o.roast === 'any' ? '' : o.roast + ' '}${DRINK_NAME[o.drink]}`;
+  return name[0].toUpperCase() + name.slice(1);
+}
+
+/** ", tick 9 (slot 9)", " in the bowl, tick 10" and the like: where and when they want it. */
+export function orderWhen(def: RegularDef): string {
+  const o = def.order;
   const slot = def.bowl || o.tick === 'any' ? '' : ` (slot ${slotOf(o.tick, def.col)})`;
   const when = o.tick === 'any' ? 'any tick' : `tick ${o.tick}${slot}`;
-  return `${what}${def.bowl ? ' in the bowl' : ''}, ${when}${o.fussy ? ', fussy' : ''}`;
+  return `${def.bowl ? ' in the bowl' : ''}, ${when}${o.fussy ? ', fussy' : ''}`;
 }

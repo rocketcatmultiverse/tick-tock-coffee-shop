@@ -1,7 +1,7 @@
 // The morning report: shown once on load when the player has been away.
 
 import type { MorningReport } from '../game/offline';
-import { el } from './panel';
+import { el } from './el';
 
 function duration(loops: number): string {
   const minutes = Math.floor((loops * 12) / 60);

@@ -8,17 +8,10 @@ import { ALL_PIECES, PIECE_LABEL, type PieceKind } from '../game/pieces';
 import { FLOOR_ROW_PRICE, PIECE_PRICE } from '../game/tuning';
 import { clockFace, spriteImg } from './art/dom';
 import { svgUrl } from './art/raster';
+import { el } from './el';
+import { pieceKey } from './hotkeys';
+import { pieceTipKey } from './tips';
 
-export function el<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  props: Partial<HTMLElementTagNameMap[K]> & { className?: string } = {},
-  ...children: (Node | string)[]
-): HTMLElementTagNameMap[K] {
-  const node = document.createElement(tag);
-  Object.assign(node, props);
-  for (const c of children) node.append(c);
-  return node;
-}
 
 export interface PanelModel {
   T: number;
@@ -90,7 +83,7 @@ export class Panel {
   private seated = el('div');
   private spills = el('div', { className: 'muted' });
   private milk = el('div', { className: 'muted' });
-  private paletteBtns = new Map<PieceKind, { btn: HTMLButtonElement; label: HTMLSpanElement }>();
+  private paletteBtns = new Map<PieceKind, { btn: HTMLButtonElement; label: HTMLSpanElement; icon: HTMLImageElement; unknown: HTMLSpanElement; info: HTMLSpanElement }>();
   private rowBtn = el('button', { textContent: `Buy a row · ${FLOOR_ROW_PRICE}` });
   private undoBtn = el('button', { textContent: 'Undo' });
   private redoBtn = el('button', { textContent: 'Redo' });
@@ -133,14 +126,20 @@ export class Panel {
       this.milk,
     );
 
+    // Each piece shows its number key and, once unlocked, a mark that it has a
+    // tooltip; a locked piece is only a question mark. Locked buttons are not
+    // disabled, so they still get hover, and a click says why nothing happens.
     const palette = el('div', { className: 'palette' });
-    for (const piece of ALL_PIECES) {
+    ALL_PIECES.forEach((piece, i) => {
       const label = el('span', { className: 'piece-label' });
-      const btn = el('button', { className: 'piece' }, spriteImg(ICON[piece], 40), label);
+      const icon = spriteImg(ICON[piece], 40);
+      const unknown = el('span', { className: 'piece-unknown', textContent: '?' });
+      const info = el('span', { className: 'piece-info', textContent: 'i' });
+      const btn = el('button', { className: 'piece' }, el('span', { className: 'piece-key', textContent: pieceKey(i) ?? '' }), info, icon, unknown, label);
       btn.onclick = () => actions.pick(piece);
-      this.paletteBtns.set(piece, { btn, label });
+      this.paletteBtns.set(piece, { btn, label, icon, unknown, info });
       palette.append(btn);
-    }
+    });
     this.build = el(
       'div',
       { className: 'card build' },
@@ -175,10 +174,15 @@ export class Panel {
     this.spills.textContent = `Spills: ${m.spillsThisLoop} this loop, ${m.spillsLastLoop} last loop`;
     this.milk.textContent = m.milk;
     for (const p of m.palette) {
-      const { btn, label } = this.paletteBtns.get(p.piece)!;
-      label.textContent = `${PIECE_LABEL[p.piece]} · ${PIECE_PRICE[p.piece]}${p.note ? ' · ' + p.note : ''}`;
-      btn.disabled = p.locked;
-      btn.title = p.locked ? 'Locked: a regular still to come brings this one' : '';
+      const { btn, label, icon, unknown, info } = this.paletteBtns.get(p.piece)!;
+      label.textContent = p.locked ? '' : `${PIECE_LABEL[p.piece]} · ${PIECE_PRICE[p.piece]}${p.note ? ' · ' + p.note : ''}`;
+      icon.hidden = p.locked;
+      info.hidden = p.locked;
+      unknown.hidden = !p.locked;
+      btn.classList.toggle('locked', p.locked);
+      btn.setAttribute('aria-disabled', String(p.locked));
+      btn.setAttribute('aria-label', p.locked ? 'A piece not unlocked yet' : PIECE_LABEL[p.piece]);
+      btn.dataset.tip = pieceTipKey(p.piece, p.locked);
       btn.classList.toggle('active', m.inHand === p.piece);
     }
     this.undoBtn.disabled = !m.canUndo;
@@ -224,7 +228,8 @@ export function keysPane(): HTMLElement[] {
       'ul',
       { className: 'keys' },
       ...[
-        'Click a palette piece, then click the floor. Drag to lay belts.',
+        'Click a palette piece, or press its number key (1 to 9, then 0), then click the floor. Drag to lay belts.',
+        'Hover a palette piece for its rules, and an underlined drink for how it is made',
         'R turn · F flip · Esc or right-click put down',
         'Z delete · X cut · C copy (the tile under the cursor)',
         'Shift+drag box select, then Z, Ctrl+X, Ctrl+C',

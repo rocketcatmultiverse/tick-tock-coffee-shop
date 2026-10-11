@@ -495,3 +495,36 @@ outputs in order, how many items passed since tick 0, and where the next goes.
 `splitterNext` and `canTake` in `src/sim/step.ts` give the renderer the
 simulator's own answer.
 
+**Q67. Hotkeys and tooltips.** *Your request, on the tooltips-and-helpers
+branch:* number keys pick from the build palette, locked pieces show as a
+question mark, unlocked pieces have a tooltip with their rules, and every
+drink a regular orders is underlined with a tooltip that shows how it is made
+in pictures. *Done as:*
+- keys 1 to 9 pick the first nine palette pieces in order and 0 the tenth.
+  The palette shows each piece's key. Picking a locked piece, by key or by
+  click, is refused with a message and leaves the hand as it was;
+  `Editor.pick` now checks, where before only a disabled button did;
+- a locked piece is only a "?" and its key. Its button is no longer disabled,
+  so it still gets hover (a short "not unlocked yet" tooltip) and a click
+  says why nothing happens;
+- an unlocked piece has a small "i" mark. Hovering the piece shows its price,
+  its key, what it makes as pictures (plot, kettle, roaster, mixer), and its
+  rules from Rules 3 and 4 and the addendum. Every number in the words comes
+  from the tuning files;
+- the drink in the newest regular's card and in the Regulars tab has a dotted
+  underline. Its tooltip reads inputs + machine = drink. Where the roast
+  depends on time, a small clock shows only the ticks the input must land on:
+  a light coffee is beans + (ticks 0 to 3) + kettle.
+*Assumed:* your latte example read "dark espresso bean + milk + mixer = dark
+latte", but a mixer takes espresso, not espresso beans (Rules 4, Mixer), so
+the first line reads dark espresso + milk + mixer. Below it come the steps
+that make each ingredient that is itself made: dark espresso beans + kettle =
+dark espresso, then beans + (ticks 6 to 9) + roaster = dark espresso beans.
+Water, beans and milk end the chain. The roaster's clock shows the ticks
+beans land on, as the kettle's does; 6 to 9 is what 9 to 12 ticks inside
+before the release on tick 6 comes to. The stools on the floor are drawn on
+the canvas and keep their hover text, with no underline. The recipes are
+checked against the simulator on every tick of the clock
+(`tests/game/recipes.test.ts`). `src/game/recipes.ts`, `src/ui/tips.ts`,
+`src/ui/tooltip.ts`, `src/ui/hotkeys.ts`.
+

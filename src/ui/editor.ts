@@ -63,9 +63,14 @@ export class Editor {
   // ---- The hand -------------------------------------------------------------
 
   pick(piece: PieceKind): void {
+    if (!this.shop.rights().unlocked.has(piece)) {
+      this.message = 'Not unlocked yet: a regular still to come brings it';
+      return;
+    }
     const dir = this.hand?.type === 'piece' ? this.hand.dir : piece === 'belt' ? 'E' : 'S';
     this.hand = { type: 'piece', piece, dir };
     this.selection = null;
+    this.message = '';
   }
 
   /** Esc: put down whatever is in hand, and drop the selection. */
