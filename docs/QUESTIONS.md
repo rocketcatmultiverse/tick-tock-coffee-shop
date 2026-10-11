@@ -473,3 +473,11 @@ already put their cups in those slots, so none changed. The simulator and
 the game still support `tick: 'any'` (its rule tests stand); no regular
 uses it. `src/levels/regulars.ts`.
 
+**Q65. The spring unlocks after the chimney sweep.** *Your decision:* the
+spring now comes with the clockmaker (place 3), the regular straight after
+the sweep, instead of with the postwoman (place 5). Read "after the chimney
+sweep" the way the addendum's "straight after the gargoyle" meant place 5.
+The postwoman still brings the second well. No reference layout changed: a
+layout may only use pieces unlocked by its place, and the spring is now
+available earlier, never later. `src/levels/regulars.ts`.
+

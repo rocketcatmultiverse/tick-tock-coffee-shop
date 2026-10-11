@@ -21,8 +21,10 @@ describe('Ladder', () => {
       return { pieces: [...r.unlocked].sort().join(','), wells: r.wellLimit };
     };
     const start = { pieces: 'belt,kettle,plot,well', wells: 1 };
-    for (const n of [1, 2, 3, 4]) expect(at(n)).toEqual(start);
-    expect(at(5)).toEqual({ pieces: 'belt,kettle,plot,spring,well', wells: 2 }); // postwoman: a second well and the spring
+    for (const n of [1, 2]) expect(at(n)).toEqual(start);
+    // The clockmaker, straight after the chimney sweep, brings the spring (docs/QUESTIONS.md, Q65).
+    for (const n of [3, 4]) expect(at(n)).toEqual({ pieces: 'belt,kettle,plot,spring,well', wells: 1 });
+    expect(at(5)).toEqual({ pieces: 'belt,kettle,plot,spring,well', wells: 2 }); // postwoman: a second well
     expect(at(6)).toEqual({ pieces: 'belt,chute,kettle,plot,spring,well', wells: 2 }); // baker: chute
     expect(at(7)).toEqual({ pieces: 'belt,chute,kettle,plot,spring,well', wells: 2 });
     expect(at(8)).toEqual({ pieces: 'belt,chute,kettle,plot,roaster,spring,well', wells: 2 }); // witch: roaster

@@ -25,6 +25,7 @@ export const REGULARS: RegularDef[] = [
     intro: 'Medium, in front of me on the ninth tick. I pay in gears, which are better than coins.',
     col: 0,
     order: { drink: 'coffee', roast: 'medium', tick: 9 },
+    unlocks: ['spring'], // straight after the chimney sweep (docs/QUESTIONS.md, Q65)
     paysIn: 'gears',
   },
   {
@@ -41,7 +42,6 @@ export const REGULARS: RegularDef[] = [
     col: 3,
     order: { drink: 'coffee', roast: 'medium', tick: 3 },
     wellLimit: 2,
-    unlocks: ['spring'],
   },
   {
     id: 'baker',
