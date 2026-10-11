@@ -14,10 +14,14 @@ import { catSpot } from './cat';
 import { CatCard } from './catCard';
 import { RegularsPanel } from './regularsPanel';
 import { SpriteBank } from './art/raster';
+import { touchFirst } from './device';
 import { Editor } from './editor';
-import { Geometry, PAD, type Spot } from './geometry';
+import { Geometry, MIN_TILE, MIN_TOUCH_TILE, PAD, type Spot } from './geometry';
+import { Guide } from './guide';
 import { bindInput } from './input';
 import { el } from './el';
+import { Shell } from './layout';
+import { Palette } from './palette';
 import { Panel, Tabs, helpPane } from './panel';
 import { showMorningReport } from './morningReport';
 import { type StoolView, type View, draw } from './render';
@@ -25,8 +29,9 @@ import { ShareCard, VisitBanner, leaveVisit, showSpoilerWarning } from './share'
 import { downloadSave, showSlotScreen } from './slots';
 import { SLOTS, migrateLegacySave, openSlot, writeSave } from './storage';
 import { tipContent } from './tips';
+import { type ToolId, Tools } from './tools';
 import { Tooltip } from './tooltip';
-import { type Box, type StoolExample, TOUR_STEPS, Tour, offerTour } from './tutorial';
+import { type Box, type StoolExample, type TourStepId, TOUR_STEPS, Tour, offerTour } from './tutorial';
 
 /** How often the shop is saved while open, in milliseconds. */
 const AUTOSAVE_MS = 2000;
@@ -47,12 +52,22 @@ function refundNote(r: RowRefund, why: string): string {
   return `${why}, so ${rows} bought before then went back, refunded in full${pieces}: ${r.coins} coins.`;
 }
 
+/** The line under the palette when nothing on the floor is hovered or tapped. */
+const REFUND_HINT = {
+  mouse: 'Z deletes the piece under the cursor, with a full refund.',
+  touch: 'Tap a piece on the floor to see it. Delete gives back every coin it cost.',
+};
+
 class App {
   readonly shop: Shop;
   readonly editor: Editor;
   readonly geo = new Geometry();
   hover: Spot | null = null;
+  inspect: Spot | null = null;
+  selectMode = false;
   running = true;
+  /** The words for the controls: a finger's, or a mouse's and the keys'. */
+  private readonly touch = touchFirst();
   speed = 1;
   private timer: number | undefined;
   private readouts = new Map<number, { tick: number; roast: Roast | null }>();
@@ -62,7 +77,11 @@ class App {
   private sprites = new SpriteBank(() => this.render());
   private ctx: CanvasRenderingContext2D;
   private panel: Panel;
+  private palette: Palette;
+  private tools: Tools;
   private tabs: Tabs;
+  private guide = new Guide();
+  private shell: Shell;
   private regularsPanel = new RegularsPanel();
   private tooltip = new Tooltip(tipContent);
   private notes: string[] = [];
@@ -104,32 +123,35 @@ class App {
     if (notice) this.notes.unshift(notice);
     const report = loaded ? applyOffline(this.shop, loaded.lastSeen, Date.now()) : null;
     this.ctx = this.canvas.getContext('2d')!;
-    this.panel = new Panel({
-      togglePause: () => this.togglePause(),
-      stepOnce: () => this.stepOnce(),
-      setSpeed: (n) => {
-        this.speed = n;
-        this.schedule();
-        this.render();
+    this.panel = new Panel(
+      {
+        togglePause: () => this.togglePause(),
+        stepOnce: () => this.stepOnce(),
+        setSpeed: (n) => {
+          this.speed = n;
+          this.schedule();
+          this.render();
+        },
+        buyRow: () => {
+          this.editor.message = this.shop.buyRow() ?? 'Bought a floor row';
+          this.render();
+        },
       },
-      pick: (p) => {
-        this.editor.pick(p);
-        this.render();
-      },
-      buyRow: () => {
-        this.editor.message = this.shop.buyRow() ?? 'Bought a floor row';
-        this.render();
-      },
-      undo: () => {
-        this.editor.undo();
-        this.render();
-      },
-      redo: () => {
-        this.editor.redo();
-        this.render();
-      },
+      this.touch ? REFUND_HINT.touch : REFUND_HINT.mouse,
+    );
+    this.palette = new Palette((p) => {
+      this.editor.pick(p);
+      if (this.editor.hand) {
+        this.selectMode = false;
+        this.inspect = null;
+      }
+      this.render();
     });
-    const catHint = el('p', { className: 'muted' }, 'Click your cat on the floor to name it or pet it.');
+    this.tools = new Tools((id) => {
+      this.tool(id);
+      this.render();
+    });
+    const catHint = el('p', { className: 'muted' }, `${this.touch ? 'Tap' : 'Click'} your cat on the floor to name it or pet it.`);
     let shopPane: Node[];
     if (visit) {
       this.visitBanner = new VisitBanner(visit);
@@ -139,25 +161,33 @@ class App {
       this.shareCard = new ShareCard(this.shop, () => this.stats());
       shopPane = [this.shareCard.root, this.saveCard(), this.catCard.root, catHint];
     }
-    this.tabs = new Tabs([
-      { id: 'regulars', label: 'Regulars', content: [this.regularsPanel.list] },
-      { id: 'log', label: 'Happenings', content: [this.regularsPanel.log] },
-      { id: 'help', label: 'Help', content: helpPane(() => this.startTour()) },
-      { id: 'shop', label: 'Shop', content: shopPane },
-    ]);
+    this.tabs = new Tabs(
+      [
+        { id: 'regulars', label: 'Regulars', content: [this.regularsPanel.list] },
+        { id: 'log', label: 'Happenings', content: [this.regularsPanel.log] },
+        { id: 'guide', label: 'Guide', content: [this.guide.root] },
+        { id: 'help', label: 'Help', content: helpPane(() => this.startTour(), this.touch) },
+        { id: 'shop', label: 'Shop', content: shopPane },
+      ],
+      () => this.tooltip.refresh(),
+    );
     this.floorArea.append(this.canvas);
-    root.append(
-      this.floorArea,
-      el('div', { className: 'bottom' }, this.panel.tillCard, this.panel.build),
-      el(
-        'aside',
-        { className: 'side' },
-        el('h1', {}, 'Tick Tock Coffee Shop', debug ? el('span', { className: 'badge' }, 'debug') : ''),
-        this.visitBanner?.root ?? '',
-        this.panel.clock,
-        this.regularsPanel.next,
-        this.tabs.root,
-      ),
+    this.shell = new Shell(
+      root,
+      {
+        title: el('h1', {}, 'Tick Tock Coffee Shop', debug ? el('span', { className: 'badge' }, 'debug') : ''),
+        visit: this.visitBanner?.root ?? null,
+        clock: this.panel.clock,
+        coins: this.panel.coins,
+        next: this.regularsPanel.next,
+        till: this.panel.tillCard,
+        tabs: this.tabs.root,
+        floor: this.floorArea,
+        tools: this.tools.root,
+        palette: this.palette.root,
+        info: this.panel.info,
+      },
+      () => this.render(),
     );
     bindInput(this.canvas, this);
     // The floor fills whatever room the panels leave it, and is redrawn when that changes.
@@ -232,13 +262,17 @@ class App {
   }
 
   private offerTour(): void {
-    offerTour(TOUR_STEPS, {
-      take: () => {
-        this.tourSeen();
-        this.startTour();
+    offerTour(
+      TOUR_STEPS,
+      {
+        take: () => {
+          this.tourSeen();
+          this.startTour();
+        },
+        skip: () => this.tourSeen(),
       },
-      skip: () => this.tourSeen(),
-    });
+      this.shell.compact,
+    );
   }
 
   private tourSeen(): void {
@@ -252,17 +286,27 @@ class App {
       {
         clock: this.panel.clock,
         newcomer: this.regularsPanel.next,
-        pieces: this.panel.pieceButtons(START_PIECES),
-        till: this.panel.tillCard,
-        help: this.tabs.button('help'),
+        pieces: () => this.palette.pieceButtons(START_PIECES),
+        till: () => (this.shell.compact ? this.panel.coins : this.panel.tillCard),
+        help: () => (this.shell.compact ? this.shell.menu : this.tabs.button('help')),
         floor: (part) => this.floorBox(part),
+        prepare: (step) => this.prepareTour(step),
       },
       this.stoolExample(),
+      { touch: this.touch, menu: this.shell.compact },
       () => {
         this.tour = null;
       },
     );
     this.tour.start();
+  }
+
+  /** In a narrow window the newest regular is in the drawer: open it for that step, and close it for the rest. */
+  private prepareTour(step: TourStepId | null): void {
+    if (step === 'regular') this.shell.openDrawer();
+    else this.shell.closeDrawer();
+    // The feeder is the left-hand column: bring it into view.
+    if (step === 'feeder' || step === 'slots') this.pan(this.geo.camX, 0);
   }
 
   /** The newest timed regular at a stool, for the tour to read their stool out. */
@@ -273,14 +317,17 @@ class App {
     return { tick, slot: slotOf(tick, def.col) };
   }
 
-  /** The feeder column, or the counter with its stools, in page pixels. */
+  /** The feeder column, or the counter with its stools, in page pixels, cut to what is in view. */
   private floorBox(part: 'feeder' | 'counter'): Box | null {
     const c = this.canvas.getBoundingClientRect();
     const g = this.geo;
     if (c.width === 0) return null;
-    if (part === 'counter') return { left: c.left + g.x0, top: c.top + g.counterY, width: g.floorW, height: g.bandY + g.band - g.counterY };
+    const left = Math.max(g.x0, 0);
+    const right = Math.min(part === 'counter' ? g.x0 + g.floorW : g.x0 + g.tile, g.width);
+    if (right <= left) return null;
+    if (part === 'counter') return { left: c.left + left, top: c.top + g.counterY, width: right - left, height: g.bandY + g.band - g.counterY };
     const top = Math.max(PAD, g.counterY - g.rows * g.tile + g.camY);
-    return { left: c.left + g.x0, top: c.top + top, width: g.tile, height: g.counterY + g.tile - top };
+    return { left: c.left + left, top: c.top + top, width: right - left, height: g.counterY + g.tile - top };
   }
 
   /** The cat's seat, once it has started asking for milk. */
@@ -298,11 +345,78 @@ class App {
   }
 
   clickFloor(spot: Spot): void {
+    this.inspect = spot;
     const cat = this.catAt();
     if (spot.row === cat.row && spot.col === cat.col) {
       this.tabs.select('shop');
       this.catCard.open();
+      this.shell.openDrawer();
     }
+  }
+
+  /** A button in the tool bar. */
+  private tool(id: ToolId): void {
+    const ed = this.editor;
+    const target = this.inspect && this.inspect.row >= 0 ? this.inspect : null;
+    // Delete, cut and copy work on the box if there is one, else on the tile last tapped.
+    const onTiles = (box: () => void, tile: (r: number, c: number) => void) => {
+      if (ed.selection) box();
+      else if (target) tile(target.row, target.col);
+      else if (this.selectMode) ed.message = 'Drag a box over the floor first';
+      else ed.message = this.touch ? 'Tap a piece on the floor first' : 'Click a piece on the floor first';
+      if (!ed.selection) this.selectMode = false;
+    };
+    switch (id) {
+      case 'turn':
+        return ed.rotateHand();
+      case 'flip':
+        return ed.flipHand();
+      case 'drop':
+        ed.putDown();
+        this.inspect = null;
+        return;
+      case 'older':
+        return ed.wheel(1);
+      case 'newer':
+        return ed.wheel(-1);
+      case 'info':
+        if (ed.hand?.type === 'piece') this.openGuide(`piece:${ed.hand.piece}`);
+        return;
+      case 'select':
+        this.selectMode = !this.selectMode;
+        ed.selection = null;
+        ed.message = this.selectMode ? `Drag a box over the floor${this.touch ? '' : ' (or Shift+drag at any time)'}` : '';
+        return;
+      case 'delete':
+        return onTiles(
+          () => ed.deleteKey(0, 0),
+          (r, c) => ed.deleteKey(r, c),
+        );
+      case 'cut':
+        return onTiles(
+          () => ed.cut('box'),
+          (r, c) => ed.cut('hover', r, c),
+        );
+      case 'copy':
+        return onTiles(
+          () => ed.copy('box'),
+          (r, c) => ed.copy('hover', r, c),
+        );
+      case 'paste':
+        return ed.pickUpBuffer();
+      case 'undo':
+        return ed.undo();
+      case 'redo':
+        return ed.redo();
+    }
+  }
+
+  /** Show the Guide tab at an entry, opening the drawer in a narrow window. */
+  private openGuide(key: string): void {
+    this.tabs.select('guide');
+    this.shell.openDrawer();
+    this.render();
+    requestAnimationFrame(() => this.guide.open(key));
   }
 
   rows(): number {
@@ -312,6 +426,12 @@ class App {
   /** Move the camera over the back room. */
   pan(dx: number, dy: number): void {
     this.geo.pan(dx, dy);
+    this.render();
+  }
+
+  /** Zoom the floor about a point on the canvas. */
+  zoom(x: number, y: number, factor: number): void {
+    this.geo.zoomAt(x, y, factor);
     this.render();
   }
 
@@ -341,7 +461,7 @@ class App {
   }
 
   private hoverInfo(): string {
-    const h = this.hover;
+    const h = this.hover ?? (this.editor.hand ? null : this.inspect);
     if (!h) return '';
     const { layout, sim } = this.shop;
     if (h.row === -2) return this.stoolInfo(h.col);
@@ -357,13 +477,13 @@ class App {
     const parts = [`Row ${h.row}, column ${h.col}`];
     if (s) parts.push(`${s.kind} (${structureToken(s)})`);
     const piece = s ? pieceOf(s.kind) : null;
-    if (piece) parts.push(`Z deletes it, all ${PIECE_PRICE[piece]} back`);
+    if (piece) parts.push(this.touch ? `Delete gives all ${PIECE_PRICE[piece]} back` : `Z deletes it, all ${PIECE_PRICE[piece]} back`);
     if (item) parts.push(`holding ${itemName(item)}`);
     if (s?.kind === 'bowl') parts.push(this.catSeat() >= 0 ? 'the cat wants warm milk here on tick 10' : 'the cat is not asking yet');
     if (s?.kind === 'feeder') parts.push(`the only way onto the counter; slot ${feederSlot(this.shop.T - 1, h.row)} is passing`);
     if (s?.kind === 'splitter') parts.push(this.splitterInfo(i));
     const cat = this.catAt();
-    if (cat.row === h.row && cat.col === h.col) parts.push(`${this.shop.catName || 'your cat'} (click to name or pet)`);
+    if (cat.row === h.row && cat.col === h.col) parts.push(`${this.shop.catName || 'your cat'} (${this.touch ? 'tap' : 'click'} to name or pet)`);
     const ro = this.readouts.get(i);
     if (s?.kind === 'kettle' && ro) parts.push(`last input landed on tick ${ro.tick}${ro.roast ? `: ${ro.roast}` : ''}`);
     return parts.join(' · ');
@@ -458,6 +578,8 @@ class App {
   }
 
   render(): void {
+    // The Select tool is for an empty hand: whatever put something in hand (a key, a cut, a paste) turns it off.
+    if (this.editor.hand) this.selectMode = false;
     // The canvas fills the floor area, at the screen's own pixel density so the lines stay crisp.
     const w = this.floorArea.clientWidth;
     const h = this.floorArea.clientHeight;
@@ -468,13 +590,15 @@ class App {
       this.canvas.style.width = `${w}px`;
       this.canvas.style.height = `${h}px`;
     }
-    this.geo.fit(w, h, this.shop.layout.rows);
+    this.geo.fit(w, h, this.shop.layout.rows, this.touch ? MIN_TOUCH_TILE : MIN_TILE);
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const view: View = {
       shop: this.shop,
       editor: this.editor,
       geo: this.geo,
       hover: this.hover,
+      inspect: this.inspect,
+      panHint: this.touch ? (this.editor.hand ? 'two fingers to look' : 'drag to look') : 'right-drag or scroll',
       readouts: this.readouts,
       stools: this.stools(),
       cat: { spot: this.catAt(), heart: this.catCard.heart, mad: this.catMad() },
@@ -495,20 +619,33 @@ class App {
       spillsLastLoop: this.shop.spillsLastLoop,
       milk: this.milkInfo(),
       seated: this.seatedInfo(),
+      message: this.editor.message,
+      hoverInfo: this.hoverInfo(),
+      bufferInfo: this.editor.buffer.entries.length
+        ? `Paste buffer: ${this.editor.buffer.entries.length} entr${this.editor.buffer.entries.length === 1 ? 'y' : 'ies'}`
+        : '',
+      rowsLocked: this.shop.rowsLocked(),
+    });
+    this.palette.update({
       palette: ALL_PIECES.map((piece) => ({
         piece,
         locked: !rights.unlocked.has(piece),
         note: piece === 'well' && Number.isFinite(rights.wellLimit) ? `${wells}/${rights.wellLimit}` : '',
       })),
       inHand: hand ? (hand.type === 'piece' ? hand.piece : 'group') : null,
-      message: this.editor.message,
-      hoverInfo: this.hoverInfo(),
-      bufferInfo: this.editor.buffer.entries.length
-        ? `Paste buffer: ${this.editor.buffer.entries.length} entr${this.editor.buffer.entries.length === 1 ? 'y' : 'ies'}`
-        : '',
+      keys: !this.touch,
+    });
+    this.tools.update({
+      hand: hand ? hand.type : 'none',
+      selectMode: this.selectMode,
+      buffer: this.editor.buffer.entries.length,
       canUndo: this.editor.canUndo,
       canRedo: this.editor.canRedo,
-      rowsLocked: this.shop.rowsLocked(),
+    });
+    this.guide.update({
+      unlocked: rights.unlocked,
+      rowsLocked: this.shop.rowsLocked() !== null,
+      regulars: this.shop.regulars.map((_, i) => this.shop.defs[i]),
     });
     this.regularsPanel.update(
       this.shop.defs,

@@ -1,9 +1,12 @@
 // The floor's geometry and camera (docs/QUESTIONS.md, Q63): the floor is
 // sized to show all its rows up to MAX_ROWS_IN_VIEW; beyond that the camera
-// moves over the back room while the counter and the stools stay put.
+// moves over the back room while the counter and the stools stay put. A
+// canvas too narrow for twelve columns at the smallest tile scrolls sideways,
+// a touch screen keeps tiles a fingertip wide, and a pinch zooms about the
+// fingers (Q71).
 
 import { describe, expect, it } from 'vitest';
-import { Geometry, MAX_ROWS_IN_VIEW } from '../../src/ui/geometry';
+import { Geometry, MAX_ROWS_IN_VIEW, MIN_TILE, MIN_TOUCH_TILE, PAD, ZOOM_MAX_TILE, ZOOM_MIN_TILE } from '../../src/ui/geometry';
 
 /** The floor area a 1920 by 1080 monitor leaves once the browser and the panels have their share. */
 const W = 1480;
@@ -60,5 +63,73 @@ describe('Geometry', () => {
     const g = fitted(6);
     expect(g.hitTest(g.x0 + 1, g.counterY - g.tile * 6 - 1)).toBeNull();
     expect(g.hitTest(g.x0 + 1, g.counterY - g.tile * 6 + 1)).toEqual({ row: 5, col: 0 });
+  });
+
+  it('a canvas too narrow for twelve columns scrolls sideways, counter and stools along with the floor', () => {
+    const g = new Geometry();
+    g.fit(300, 700, 6, MIN_TOUCH_TILE);
+    expect(g.tile).toBeGreaterThanOrEqual(MIN_TOUCH_TILE);
+    expect(g.maxCamX).toBe(12 * g.tile - (300 - 2 * PAD));
+    expect(g.hiddenCols.left).toBe(0);
+    expect(g.hiddenCols.right).toBeGreaterThan(0);
+    const y = g.counterY + 1;
+    expect(g.hitTest(PAD + 1, y)).toEqual({ row: -1, col: 0 });
+    g.pan(-10_000, 0);
+    expect(g.camX).toBe(g.maxCamX);
+    expect(g.hiddenCols.right).toBe(0);
+    expect(g.hitTest(300 - PAD - 1, y)).toEqual({ row: -1, col: 11 });
+    expect(g.hitTest(300 - PAD - 1, g.bandY + 1)).toEqual({ row: -2, col: 11 });
+    // Nothing off the canvas is hit, even where the floor runs on past it.
+    g.pan(10_000, 0);
+    expect(g.hitTest(300, y)).toBeNull();
+  });
+
+  it('a mouse fits tiles down to MIN_TILE, a finger only to MIN_TOUCH_TILE', () => {
+    const mouse = new Geometry();
+    mouse.fit(420, 500, 6, MIN_TILE);
+    const touch = new Geometry();
+    touch.fit(420, 500, 6, MIN_TOUCH_TILE);
+    expect(mouse.tile).toBeGreaterThanOrEqual(MIN_TILE);
+    expect(mouse.tile).toBeLessThan(MIN_TOUCH_TILE);
+    expect(mouse.maxCamX).toBe(0);
+    expect(touch.tile).toBeGreaterThanOrEqual(MIN_TOUCH_TILE);
+    expect(touch.maxCamX).toBeGreaterThan(0);
+  });
+
+  it('a floor that scrolls sideways anyway grows with a tall canvas, but only so far', () => {
+    const short = new Geometry();
+    short.fit(360, 380, 6, MIN_TOUCH_TILE);
+    const tall = new Geometry();
+    tall.fit(360, 900, 6, MIN_TOUCH_TILE);
+    expect(short.tile).toBe(MIN_TOUCH_TILE);
+    expect(tall.tile).toBeGreaterThan(MIN_TOUCH_TILE);
+    expect(tall.tile).toBeLessThanOrEqual(MIN_TOUCH_TILE * 1.2);
+  });
+
+  it('a pinch zooms about the fingers: the tile under them stays under them', () => {
+    const g = new Geometry();
+    g.fit(360, 600, 16, MIN_TOUCH_TILE);
+    g.pan(-40, 60);
+    const at = { x: 200, y: g.counterY - 2.5 * g.tile };
+    const before = g.hitTest(at.x, at.y);
+    expect(before).not.toBeNull();
+    g.zoomAt(at.x, at.y, 1.5);
+    expect(g.tile).toBeGreaterThan(MIN_TOUCH_TILE);
+    expect(g.hitTest(at.x, at.y)).toEqual(before);
+    g.zoomAt(at.x, at.y, 1 / 1.5);
+    expect(g.hitTest(at.x, at.y)).toEqual(before);
+  });
+
+  it('the zoom stays between ZOOM_MIN_TILE and ZOOM_MAX_TILE, and lasts through a refit', () => {
+    const g = new Geometry();
+    g.fit(360, 600, 6, MIN_TOUCH_TILE);
+    g.zoomAt(100, 100, 100);
+    expect(g.tile).toBe(ZOOM_MAX_TILE);
+    g.zoomAt(100, 100, 0.0001);
+    expect(g.tile).toBe(ZOOM_MIN_TILE);
+    // Zoomed out, the whole floor fits across and nothing scrolls sideways.
+    expect(g.maxCamX).toBe(0);
+    g.fit(360, 600, 6, MIN_TOUCH_TILE);
+    expect(g.tile).toBe(ZOOM_MIN_TILE);
   });
 });

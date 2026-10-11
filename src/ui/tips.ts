@@ -23,10 +23,14 @@ import { type Ingredient, type RecipeMachine, type RecipeStep, type Term, kettle
 import { FLOOR_ROW_PRICE, MILK_PAIL_PRICE, PIECE_PRICE, ROWS_FOR_SALE_AFTER_HAPPY, START_ROWS } from '../game/tuning';
 import { clockWindowImg, spriteImg } from './art/dom';
 import { itemKey } from './art/svg';
+import { touchFirst } from './device';
 import { pieceKey } from './hotkeys';
 import { el } from './el';
+import { TOOLS, type ToolId } from './tools';
 
 const ticks = (n: number) => `${n} tick${n === 1 ? '' : 's'}`;
+/** "1 coin", "25 coins". */
+export const coins = (n: number) => `${n} coin${n === 1 ? '' : 's'}`;
 const ROASTS: Roast[] = ['light', 'medium', 'dark'];
 
 /** "0–3", "10–1", "2, 5–6": a set of clock ticks as runs. */
@@ -157,20 +161,27 @@ function header(name: string, aside: string): HTMLElement {
   return el('div', { className: 'tip-head' }, el('span', { className: 'tip-name' }, name), el('span', { className: 'muted' }, aside));
 }
 
+/** A piece's number key, where there is a keyboard to press it on. */
 const keyNote = (piece: PieceKind) => {
   const k = pieceKey(ALL_PIECES.indexOf(piece));
-  return k ? ` · key ${k}` : '';
+  return k && !touchFirst() ? ` · key ${k}` : '';
 };
 
-function pieceTip(piece: PieceKind): HTMLElement {
-  return el(
-    'div',
-    {},
-    header(PIECE_LABEL[piece], `${PIECE_PRICE[piece]} coins${keyNote(piece)}`),
+/** How to delete a piece on the floor, in the words for this device. */
+export const deleteHint = (touch: boolean) =>
+  touch ? 'Tap one on the floor, then Delete, for a full refund.' : 'Hover one on the floor and press Z to delete it, for a full refund.';
+
+/** A piece's tooltip under its name: what it makes, its rules, and how to get its coins back. */
+export function pieceBody(piece: PieceKind): HTMLElement[] {
+  return [
     ...(PIECE_MAKES[piece] ?? []).map((s) => equation(s, 30)),
     el('ul', { className: 'tip-rules' }, ...PIECE_RULES[piece].map((line) => el('li', {}, line))),
-    el('div', { className: 'tip-foot' }, 'Hover one on the floor and press Z to delete it, for a full refund.'),
-  );
+    el('div', { className: 'tip-foot' }, deleteHint(touchFirst())),
+  ];
+}
+
+function pieceTip(piece: PieceKind): HTMLElement {
+  return el('div', {}, header(PIECE_LABEL[piece], `${coins(PIECE_PRICE[piece])}${keyNote(piece)}`), ...pieceBody(piece));
 }
 
 /** What the Buy a row button says: a row is never refunded, and is for sale only once a regular is happy. */
@@ -183,33 +194,51 @@ export const ROW_LOCKED = `Floor rows are for sale once ${
   ROWS_FOR_SALE_AFTER_HAPPY === 1 ? 'your first regular is' : `your first ${ROWS_FOR_SALE_AFTER_HAPPY} regulars are`
 } happy. The ${START_ROWS} rows you start with are plenty until then.`;
 
-function rowTip(locked: boolean): HTMLElement {
-  return el(
-    'div',
-    {},
-    header('Buy a row', locked ? 'not for sale yet' : `${FLOOR_ROW_PRICE} coins`),
+/** The Buy a row tooltip under its name. */
+export function rowBody(locked: boolean): HTMLElement[] {
+  return [
     ...(locked ? [el('div', { className: 'muted' }, ROW_LOCKED)] : []),
     el('ul', { className: 'tip-rules' }, ...ROW_RULES.map((line) => el('li', {}, line))),
-  );
+  ];
 }
+
+function rowTip(locked: boolean): HTMLElement {
+  return el('div', {}, header('Buy a row', locked ? 'not for sale yet' : coins(FLOOR_ROW_PRICE)), ...rowBody(locked));
+}
+
+export const LOCKED_LINE = 'A regular still to come brings this piece.';
 
 function lockedTip(piece: PieceKind): HTMLElement {
-  return el('div', {}, header('?', `not unlocked yet${keyNote(piece)}`), el('div', { className: 'muted' }, 'A regular still to come brings this piece.'));
+  return el('div', {}, header('?', `not unlocked yet${keyNote(piece)}`), el('div', { className: 'muted' }, LOCKED_LINE));
 }
+
+/** How a drink is made, as pictures: the last step big, then the steps that make its ingredients. */
+export function orderBody(want: Ingredient): HTMLElement[] {
+  const [last, ...before] = recipeFor(want);
+  return [...(last ? [equation(last, 40)] : []), ...before.map((s) => equation(s, 30, 'equation sub'))];
+}
+
+/** "Medium coffee", "Latte": a drink's name as a title. */
+export function drinkTitle(want: Ingredient): string {
+  const name = ingredientName(want);
+  return name[0].toUpperCase() + name.slice(1);
+}
+
+/** The picture of a drink, any roast drawn as medium. */
+export const drinkSprite = (want: Ingredient) => ingredientSprite(want);
 
 function orderTip(want: Ingredient): HTMLElement {
-  const [last, ...before] = recipeFor(want);
-  const name = ingredientName(want);
-  return el(
-    'div',
-    {},
-    header(name[0].toUpperCase() + name.slice(1), ''),
-    ...(last ? [equation(last, 40)] : []),
-    ...before.map((s) => equation(s, 30, 'equation sub')),
-  );
+  return el('div', {}, header(drinkTitle(want), ''), ...orderBody(want));
 }
 
-/** The data-tip key for an order, and for a palette piece. */
+/** A tool's name, its key where there is a keyboard, and what it does. */
+function toolTip(id: ToolId): HTMLElement {
+  const t = TOOLS[id];
+  const touch = touchFirst();
+  return el('div', {}, header(t.label, touch ? '' : t.key), el('div', {}, touch ? (t.touchLine ?? t.line) : t.line));
+}
+
+/** The data-tip key for an order, and for a palette piece. A tool's is `tool:<id>`. */
 export const orderTipKey = (drink: Drink, roast: Roast | 'any') => `order:${drink}:${roast}`;
 export const pieceTipKey = (piece: PieceKind, locked: boolean) => `${locked ? 'locked' : 'piece'}:${piece}`;
 
@@ -221,5 +250,6 @@ export function tipContent(key: string): HTMLElement | null {
   }
   if (kind === 'row') return rowTip(a === 'locked');
   if (kind === 'order') return orderTip({ kind: a as Drink, roast: b === 'any' ? null : (b as Roast) });
+  if (kind === 'tool' && a in TOOLS) return toolTip(a as ToolId);
   return null;
 }

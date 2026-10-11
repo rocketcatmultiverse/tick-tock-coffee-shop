@@ -31,8 +31,16 @@
   --leaf: #7cab5a;
   --cherry: #c8553d;
   --sketch: 255px 18px 225px 18px / 18px 225px 18px 255px;
+  /* The same wobble for small square buttons. */
+  --sketch-sm: 14px 7px 12px 6px / 6px 12px 7px 14px;
   --hand: 'Patrick Hand', 'Comic Sans MS', cursive;
   --brush: 'Caveat Brush', 'Patrick Hand', cursive;
+  /* The build palette: a piece's button, the space between, a page arrow. The
+     palette reads these to work out how many pieces fit on a page. */
+  --piece: clamp(60px, 4.6vw, 76px);
+  --piece-gap: 6px;
+  --arrow: 28px;
+  --palette-fill: 0;
 
   font-family: var(--hand);
   font-size: 16px;
@@ -40,6 +48,8 @@
   color: var(--cream);
   background: var(--night);
   color-scheme: dark;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 /* Author display rules must not undo the hidden attribute (tab panes, the cat card). */
@@ -52,23 +62,49 @@ body {
   height: 100%;
   margin: 0;
   overflow: hidden;
+  overscroll-behavior: none;
   background: var(--night);
+  -webkit-tap-highlight-color: transparent;
 }
 
-/* One screen, no page scroll: the floor fills the top left, the till and the
-   build palette run along the bottom, and the clock, the newest regular and
-   the tabs fill the right. Only a tab's own content may scroll. */
+/* No double-tap zoom; the floor and the palette take their own gestures. */
+body {
+  touch-action: manipulation;
+}
+
+/* A held finger picks, it does not select text or open the image menu. */
+button,
+canvas,
+img,
+.palette,
+.tools,
+.topbar {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* ---- Layout: one screen, no page scroll (src/ui/layout.ts) ---------------------- */
+
 #app {
   box-sizing: border-box;
   height: 100vh;
-  padding: 12px 16px;
+  height: 100dvh;
+  padding: max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-left));
   display: grid;
   gap: 12px 16px;
-  grid-template-columns: minmax(0, 1fr) 380px;
+}
+
+/* Wide: the tool bar down the floor's left, the till and the palette along the
+   bottom, and the clock, the newest regular and the tabs in the right column. */
+.layout-wide {
+  --side-w: clamp(290px, 24vw, 380px);
+  grid-template-columns: auto minmax(0, 1fr) var(--side-w);
   grid-template-rows: minmax(0, 1fr) auto;
   grid-template-areas:
-    'floor side'
-    'bottom side';
+    'tools floor side'
+    'dock dock side';
 }
 
 .floor-area {
@@ -83,14 +119,27 @@ canvas.floor {
   inset: 0;
   display: block;
   cursor: crosshair;
-  user-select: none;
+  touch-action: none;
 }
 
-.bottom {
-  grid-area: bottom;
+.layout-wide .tools {
+  grid-area: tools;
+  flex-direction: column;
+  align-self: start;
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+
+.dock {
+  grid-area: dock;
+  min-width: 0;
+  min-height: 0;
+}
+
+.layout-wide .dock {
   display: flex;
   gap: 12px;
-  min-width: 0;
 }
 
 .side {
@@ -99,6 +148,154 @@ canvas.floor {
   flex-direction: column;
   gap: 10px;
   min-height: 0;
+}
+
+/* Compact: tall puts the clock on top and the controls under the floor; flat
+   puts the controls in a column on the right. The side column is a drawer. */
+.compact {
+  gap: 8px;
+  padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom))
+    max(8px, env(safe-area-inset-left));
+}
+
+.layout-tall {
+  --piece: 58px;
+  --arrow: 26px;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'top'
+    'floor'
+    'dock';
+}
+
+.layout-flat {
+  --piece: 54px;
+  --arrow: 24px;
+  --palette-fill: 1;
+  --dock-w: clamp(250px, 32vw, 330px);
+  grid-template-columns: minmax(0, 1fr) var(--dock-w);
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: 'floor dock';
+}
+
+.topbar {
+  grid-area: top;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.compact .dock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.layout-flat .dock {
+  gap: 6px;
+}
+
+.layout-flat .dock > .clock {
+  flex: none;
+}
+
+.coins-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dock-status {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: none;
+}
+
+.layout-tall .dock-status {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.layout-tall .dock-status .info {
+  flex: 1;
+}
+
+/* The drawer: the side column, slid in over the floor from the right. */
+.compact .side {
+  position: fixed;
+  z-index: 12;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  box-sizing: border-box;
+  width: min(400px, 100vw);
+  padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) 12px;
+  background: var(--night);
+  border-left: 2.5px solid var(--line);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  transform: translateX(105%);
+  visibility: hidden;
+  transition:
+    transform 0.2s ease,
+    visibility 0s linear 0.2s;
+}
+
+.compact .side.open {
+  transform: none;
+  visibility: visible;
+  transition: transform 0.2s ease;
+}
+
+.compact .side .tabs {
+  flex: 1 1 0;
+  min-height: 300px;
+}
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 11;
+  background: rgba(20, 14, 22, 0.62);
+}
+
+.drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* The way out of the drawer stays in view while it scrolls. */
+.compact .drawer-head {
+  position: sticky;
+  z-index: 1;
+  top: calc(-1 * max(10px, env(safe-area-inset-top)));
+  margin-top: calc(-1 * max(10px, env(safe-area-inset-top)));
+  padding-top: max(10px, env(safe-area-inset-top));
+  padding-bottom: 4px;
+  background: var(--night);
+}
+
+.drawer-head h1 {
+  font-size: 30px;
+}
+
+.menu-btn,
+.drawer-close {
+  flex: none;
+  width: 44px;
+  height: 40px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: var(--sketch-sm);
 }
 
 /* ---- Side panel ------------------------------------------------------------ */
@@ -169,6 +366,7 @@ canvas.floor {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
 }
 
 .legend {
@@ -213,20 +411,184 @@ canvas.floor {
   height: 40px;
 }
 
+.controls button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.btn-icon {
+  display: grid;
+  place-items: center;
+}
+
+/* A short window: a smaller clock, so the tabs keep their room. */
+@media (max-height: 760px) {
+  .layout-wide .dial {
+    width: 76px;
+    height: 76px;
+  }
+
+  .layout-wide .legend,
+  .layout-wide .tick-label {
+    display: none;
+  }
+
+  .layout-wide .side h1 {
+    font-size: 30px;
+  }
+
+  .layout-wide .clock {
+    gap: 8px;
+    padding: 10px 12px;
+  }
+}
+
+/* The clock in a narrow window, or a short wide one: one line of dial, tick and controls. */
+.compact .clock,
+.short .clock {
+  flex: 1;
+  min-width: 0;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 4px 6px;
+  border-width: 2px;
+  border-radius: var(--sketch-sm);
+}
+
+.compact .clock-top,
+.short .clock-top {
+  gap: 6px;
+  min-width: 0;
+}
+
+.compact .dial,
+.short .dial {
+  width: 40px;
+  height: 40px;
+}
+
+.compact .legend,
+.compact .tick-label,
+.short .legend,
+.short .tick-label {
+  display: none;
+}
+
+.compact .clock-text,
+.short .clock-text {
+  gap: 0;
+}
+
+.compact .tick-big,
+.short .tick-big {
+  font-size: 23px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.compact .tick-small,
+.short .tick-small {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.compact .controls,
+.short .controls {
+  margin-left: auto;
+  gap: 5px;
+  flex: none;
+}
+
+.compact .controls > *,
+.short .controls > * {
+  flex: none;
+  height: 38px;
+  border-radius: var(--sketch-sm);
+}
+
+.compact .controls button,
+.short .controls button {
+  width: 40px;
+  padding: 0;
+}
+
+.compact .controls select,
+.short .controls select {
+  padding: 2px 4px;
+}
+
+.compact .controls .btn-label,
+.short .controls .btn-label {
+  display: none;
+}
+
+.short .clock {
+  flex: none;
+}
+
+.coins {
+  flex: none;
+  font-family: var(--brush);
+  font-size: 21px;
+  line-height: 1;
+  color: var(--gold);
+  white-space: nowrap;
+}
+
+@media (max-width: 420px) {
+  .layout-tall .tick-small {
+    display: none;
+  }
+}
+
+/* The smallest phones: everything in the top bar a little smaller, nothing left out. */
+@media (max-width: 350px) {
+  .layout-tall .dial {
+    width: 32px;
+    height: 32px;
+  }
+
+  .layout-tall .tick-big {
+    font-size: 20px;
+  }
+
+  .layout-tall .controls button {
+    width: 36px;
+  }
+
+  .layout-tall .menu-btn {
+    width: 40px;
+  }
+}
+
 .till-card {
   flex: none;
-  width: 250px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   gap: 1px;
   font-size: 15px;
 }
 
+.layout-wide .till-card {
+  padding: 8px 14px 10px;
+}
+
 .till-line {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.till-line .row-btn {
+  margin-left: auto;
+  padding: 2px 10px;
+  font-size: 15px;
 }
 
 .stats {
@@ -252,8 +614,18 @@ select {
   cursor: pointer;
 }
 
-button:hover:not(:disabled),
-select:hover {
+@media (hover: hover) {
+  button:hover:not(:disabled),
+  select:hover {
+    background: #3d3146;
+  }
+
+  button.primary:hover:not(:disabled) {
+    background: #f0c46a;
+  }
+}
+
+button:active:not(:disabled) {
   background: #3d3146;
 }
 
@@ -262,7 +634,7 @@ button.primary {
   color: var(--night);
 }
 
-button.primary:hover:not(:disabled) {
+button.primary:active:not(:disabled) {
   background: #f0c46a;
 }
 
@@ -277,33 +649,174 @@ button:disabled {
   flex-wrap: wrap;
 }
 
+/* ---- The tool bar (src/ui/tools.ts) ----------------------------------------------- */
+
+.tools {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+button.tool {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 3px 2px;
+  font-size: 12px;
+  line-height: 1;
+  border-radius: var(--sketch-sm);
+}
+
+.tool .icon {
+  flex: none;
+}
+
+.tool-label {
+  white-space: nowrap;
+}
+
+button.tool.active {
+  background: var(--gold);
+  color: var(--night);
+}
+
+.tool-badge {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  box-sizing: border-box;
+  border-radius: 8px;
+  background: var(--gold);
+  color: var(--night);
+  font-size: 11px;
+  line-height: 15px;
+  text-align: center;
+}
+
+.layout-wide button.tool {
+  width: 62px;
+  height: 54px;
+}
+
+@media (max-height: 760px) {
+  .layout-wide button.tool {
+    height: 46px;
+  }
+}
+
+.layout-tall .tools {
+  gap: 4px;
+}
+
+.layout-tall button.tool {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 76px;
+  height: 46px;
+  font-size: 11px;
+}
+
+.layout-flat .tools {
+  gap: 4px;
+}
+
+/* Icons only: press and hold one, or hover it, for its name. */
+.layout-flat button.tool {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 40px;
+}
+
+.layout-flat .tool-label {
+  display: none;
+}
+
+/* ---- The build palette (src/ui/palette.ts) ------------------------------------- */
+
 .build {
   flex: 1;
   min-width: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 14px;
+  gap: 6px 14px;
   padding: 10px 12px;
 }
 
-.palette {
-  display: grid;
-  grid-template-columns: repeat(10, 76px);
-  gap: 6px;
-  flex: none;
+.build .palette-wrap {
+  flex: 10 1 calc(var(--pieces, 10) * (var(--piece) + var(--piece-gap)));
 }
 
-.build-side {
+.build .info {
+  flex: 1 1 220px;
+}
+
+.palette-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--piece-gap);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.layout-tall .palette-wrap {
+  flex: none;
+  justify-content: center;
+}
+
+.layout-flat .palette-wrap {
+  flex: 1 1 0;
+  align-items: stretch;
+}
+
+.palette {
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-wrap: wrap;
+  align-content: center;
+  gap: var(--piece-gap);
+  touch-action: none;
+}
+
+.compact .palette {
+  justify-content: center;
+}
+
+.layout-flat .palette {
+  align-content: flex-start;
+}
+
+.page-arrow {
+  flex: none;
+  width: var(--arrow);
+  height: var(--piece);
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: var(--sketch-sm);
+}
+
+.layout-flat .page-arrow {
+  height: auto;
+}
+
+.page-note {
+  display: none;
 }
 
 button.piece {
-  width: 76px;
-  height: 76px;
+  position: relative;
+  flex: none;
+  width: var(--piece);
+  height: var(--piece);
   padding: 2px;
   background: var(--floor);
   color: var(--night);
@@ -316,11 +829,27 @@ button.piece {
   line-height: 1.05;
 }
 
-button.piece {
-  position: relative;
+button.piece img {
+  width: calc(var(--piece) * 0.52);
+  height: calc(var(--piece) * 0.52);
 }
 
-button.piece:hover:not(:disabled):not(.locked) {
+.compact button.piece {
+  font-size: 11px;
+  border-radius: var(--sketch-sm);
+}
+
+@media (hover: hover) {
+  button.piece:hover:not(:disabled):not(.locked) {
+    background: #ecd2ad;
+  }
+
+  button.piece:hover .piece-info {
+    opacity: 1;
+  }
+}
+
+button.piece:active:not(.locked) {
   background: #ecd2ad;
 }
 
@@ -337,13 +866,9 @@ button.piece.locked {
   cursor: default;
 }
 
-button.piece.locked:hover {
-  background: var(--panel-deep);
-}
-
 .piece-unknown {
   font-family: var(--brush);
-  font-size: 40px;
+  font-size: calc(var(--piece) * 0.52);
   line-height: 1;
 }
 
@@ -371,16 +896,26 @@ button.piece.locked:hover {
   opacity: 0.65;
 }
 
-button.piece:hover .piece-info {
-  opacity: 1;
+.compact .piece-info {
+  display: none;
 }
 
 .piece-label {
   text-align: center;
 }
 
+/* ---- What just happened, and what is under the cursor --------------------------------- */
+
+.info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
 .message,
-.hover {
+.hover,
+.buffer-info {
   min-height: 1.3em;
   white-space: nowrap;
   overflow: hidden;
@@ -396,6 +931,27 @@ button.piece:hover .piece-info {
   font-size: 15px;
 }
 
+/* In a narrow window, a line for what just happened and two for the tile tapped. */
+.compact .info {
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.compact .hover {
+  font-size: 14px;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  height: 2.5em;
+}
+
+.compact .buffer-info {
+  display: none;
+}
+
+
 /* ---- Tabs ------------------------------------------------------------------------ */
 
 .tabs {
@@ -408,13 +964,25 @@ button.piece:hover .piece-info {
 
 .tab-bar {
   display: flex;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 5px;
 }
 
 button.tab {
-  flex: 1;
-  padding: 3px 4px;
+  flex: 1 1 auto;
+  padding: 3px 5px;
   font-size: 15px;
+}
+
+@media (max-width: 1280px) {
+  .layout-wide button.tab {
+    padding: 2px 3px;
+    font-size: 14px;
+  }
+
+  .layout-wide .tab-bar {
+    gap: 4px;
+  }
 }
 
 button.tab.active {
@@ -426,6 +994,7 @@ button.tab.active {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .pane {
@@ -448,6 +1017,18 @@ details > summary {
   font-size: 15px;
 }
 
+.keys li {
+  margin: 2px 0;
+}
+
+.help-head {
+  margin: 4px 0 0;
+  font-family: var(--brush);
+  font-weight: 400;
+  font-size: 22px;
+  color: var(--gold);
+}
+
 .credits {
   font-size: 13px;
   color: var(--muted);
@@ -455,6 +1036,103 @@ details > summary {
 
 .credits a {
   color: var(--gold);
+}
+
+/* ---- The Guide (src/ui/guide.ts) ------------------------------------------------- */
+
+.guide {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.guide > p {
+  margin: 0;
+}
+
+.guide-head {
+  margin: 8px 0 2px;
+  font-family: var(--brush);
+  font-weight: 400;
+  font-size: 22px;
+  color: var(--gold);
+}
+
+.guide-entry {
+  border-bottom: 1.5px dashed rgba(233, 220, 198, 0.25);
+  padding: 3px 0;
+}
+
+.guide-entry > summary.guide-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  list-style: none;
+  font-family: var(--hand);
+  font-size: 17px;
+  color: var(--cream);
+}
+
+.guide-summary::-webkit-details-marker {
+  display: none;
+}
+
+.guide-summary::after {
+  content: '+';
+  flex: none;
+  width: 16px;
+  font-family: var(--brush);
+  font-size: 20px;
+  color: var(--gold);
+  text-align: center;
+}
+
+.guide-entry[open] > .guide-summary::after {
+  content: '–';
+}
+
+.guide-summary img {
+  flex: none;
+  background: var(--floor);
+  border-radius: 7px;
+}
+
+.guide-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.guide-aside {
+  font-size: 14px;
+  text-align: right;
+}
+
+.guide-body {
+  padding: 2px 0 10px;
+  font-size: 15px;
+}
+
+.guide-locked {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 0;
+  border-bottom: 1.5px dashed rgba(233, 220, 198, 0.25);
+}
+
+.guide-q {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  border: 1.5px dashed var(--muted);
+  border-radius: 7px;
+  font-family: var(--brush);
+  font-size: 22px;
+  color: var(--muted);
 }
 
 /* ---- Regulars ------------------------------------------------------------------ */
@@ -495,6 +1173,30 @@ details > summary {
 .intro {
   color: var(--muted);
   font-size: 15px;
+}
+
+/* A short wide window: the newest regular's card keeps to the essentials,
+   and the title gives way to the tabs. */
+@media (max-height: 760px) {
+  .layout-wide .next .portrait {
+    width: 56px;
+    height: 56px;
+  }
+
+  .layout-wide .next {
+    padding: 10px 12px;
+  }
+
+  .layout-wide .next .intro,
+  .layout-wide .next .happy-note {
+    display: none;
+  }
+}
+
+@media (max-height: 640px) {
+  .layout-wide .side > h1 {
+    display: none;
+  }
 }
 
 .reg-list,
@@ -573,6 +1275,7 @@ details > summary {
 
 .cat-card input {
   width: 160px;
+  max-width: 100%;
 }
 
 /* ---- Sharing ----------------------------------------------------------------------- */
@@ -581,6 +1284,10 @@ details > summary {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.share-card input {
+  min-width: 0;
 }
 
 .share-link {
@@ -618,23 +1325,36 @@ details > summary {
   justify-content: flex-end;
 }
 
-/* ---- The morning report ------------------------------------------------------------ */
+/* ---- The morning report and the other cards over the page ----------------------------- */
 
 .overlay {
   position: fixed;
   inset: 0;
+  z-index: 25;
+  box-sizing: border-box;
+  padding: 16px;
+  overflow-y: auto;
   background: rgba(20, 14, 22, 0.7);
   display: flex;
-  align-items: center;
-  justify-content: center;
+}
+
+.overlay > .report {
+  margin: auto;
 }
 
 .report {
+  box-sizing: border-box;
   background: var(--panel);
   border: 2.5px solid var(--line);
   border-radius: var(--sketch);
   padding: 20px 26px;
-  max-width: 480px;
+  max-width: min(480px, 100%);
+}
+
+@media (max-width: 480px) {
+  .report {
+    padding: 16px 18px;
+  }
 }
 
 .report h2 {
@@ -663,9 +1383,9 @@ details > summary {
   position: fixed;
   top: 0;
   left: 0;
-  z-index: 20;
+  z-index: 30;
   box-sizing: border-box;
-  max-width: 400px;
+  max-width: min(400px, calc(100vw - 16px));
   padding: 10px 14px;
   background: var(--panel);
   border: 2.5px solid var(--gold);
@@ -702,6 +1422,7 @@ details > summary {
 /* A recipe as pictures: inputs + machine = what it makes. */
 .equation {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: 2px;
   margin-top: 8px;
@@ -719,6 +1440,12 @@ details > summary {
   align-items: center;
   gap: 2px;
   width: 64px;
+}
+
+@media (max-width: 480px) {
+  .term {
+    width: 54px;
+  }
 }
 
 .term img {
@@ -747,14 +1474,16 @@ details > summary {
 
 /* ---- Floor rows, locked until the first regular is happy ----------------------------- */
 
-.build-side button.locked {
+button.row-btn.locked {
   border-style: dashed;
   color: var(--muted);
   cursor: default;
 }
 
-.build-side button.locked:hover {
-  background: var(--panel);
+@media (hover: hover) {
+  button.row-btn.locked:hover {
+    background: var(--panel);
+  }
 }
 
 .tip-foot {
@@ -773,9 +1502,11 @@ button.link {
   text-underline-offset: 3px;
 }
 
-button.link:hover:not(:disabled) {
-  background: none;
-  color: var(--cream);
+@media (hover: hover) {
+  button.link:hover:not(:disabled) {
+    background: none;
+    color: var(--cream);
+  }
 }
 
 /* ---- The save in the Shop tab, and the tour in the Help tab ------------------------- */
@@ -804,13 +1535,21 @@ button.link:hover:not(:disabled) {
   z-index: 10;
   overflow: auto;
   box-sizing: border-box;
-  padding: 32px 16px;
+  padding: max(24px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
   background: var(--night);
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   gap: 14px;
+}
+
+/* Centred when it fits, and scrolled from the top when it does not. */
+.slots-screen > :first-child {
+  margin-top: auto;
+}
+
+.slots-screen > .slots-foot {
+  margin-bottom: auto;
 }
 
 .slots-screen h1 {
@@ -820,6 +1559,7 @@ button.link:hover:not(:disabled) {
   font-size: 60px;
   line-height: 1;
   color: var(--gold);
+  text-align: center;
 }
 
 .slots-lead {
@@ -831,11 +1571,15 @@ button.link:hover:not(:disabled) {
 .slots-notice {
   margin: 0;
   color: var(--gold);
+  text-align: center;
 }
 
 .slots {
   display: grid;
-  grid-template-columns: repeat(3, 300px);
+  grid-template-columns: repeat(auto-fit, minmax(260px, 300px));
+  justify-content: center;
+  width: 100%;
+  max-width: 960px;
   gap: 18px;
   margin-top: 8px;
 }
@@ -846,6 +1590,20 @@ button.link:hover:not(:disabled) {
   gap: 10px;
   min-height: 230px;
   padding: 14px 16px;
+}
+
+@media (max-width: 640px) {
+  .slots-screen h1 {
+    font-size: 42px;
+  }
+
+  .slots {
+    gap: 12px;
+  }
+
+  .card.slot {
+    min-height: 0;
+  }
 }
 
 .card.slot.empty {
@@ -892,6 +1650,7 @@ button.link:hover:not(:disabled) {
   flex: 1;
   font-size: 15px;
   padding: 3px 6px;
+  min-height: 36px;
 }
 
 .slot-status {
@@ -921,7 +1680,10 @@ button.link:hover:not(:disabled) {
   position: fixed;
   z-index: 16;
   box-sizing: border-box;
-  width: 360px;
+  width: min(360px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
   padding: 12px 18px 14px;
   background: var(--panel);
   border: 2.5px solid var(--gold);
@@ -943,6 +1705,18 @@ button.link:hover:not(:disabled) {
 
 .tour-card p {
   margin: 0;
+}
+
+@media (max-width: 480px), (max-height: 480px) {
+  .tour-card {
+    padding: 10px 14px 12px;
+    gap: 6px;
+    font-size: 15px;
+  }
+
+  .tour-card h3 {
+    font-size: 24px;
+  }
 }
 
 .tour-head {

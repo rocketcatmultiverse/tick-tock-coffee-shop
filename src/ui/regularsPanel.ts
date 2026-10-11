@@ -57,7 +57,7 @@ export class RegularsPanel {
             'div',
             { className: 'muted' },
             happyPips(happiness[regulars.length - 1] ?? 0),
-            ` Happy after ${HAPPY_LOOPS} loops in a row with their cup. The next regular walks in once everyone is happy.`,
+            el('span', { className: 'happy-note' }, ` Happy after ${HAPPY_LOOPS} loops in a row with their cup. The next regular walks in once everyone is happy.`),
           ),
         ),
       );

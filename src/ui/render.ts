@@ -4,7 +4,7 @@
 //
 // The back room is a window the camera moves over; the counter, its wooden
 // edge and the stool band (which carries the counter strip) stay pinned to
-// the bottom.
+// the bottom. A floor wider than the canvas scrolls sideways, counter and all.
 
 import type { Dir, Item, Roast, Structure } from '../sim/types';
 import { canTake, clockTick, colOf, feederSlot, isCounter, rowOf, slotOf, splitterNext, splitterOutputs, stepFrom, tileIndex } from '../sim';
@@ -42,6 +42,10 @@ export interface View {
   editor: Editor;
   geo: Geometry;
   hover: Spot | null;
+  /** The tile last tapped or clicked with nothing in hand. */
+  inspect: Spot | null;
+  /** How to move the camera, for the hint at the edge: "right-drag or scroll", "drag". */
+  panHint: string;
   /** Kettle readouts: the tick its input last landed on and the roast that gave. */
   readouts: Map<number, { tick: number; roast: Roast | null }>;
   stools: StoolView[];
@@ -82,6 +86,9 @@ function text(
   ctx.textBaseline = opts.base ?? 'middle';
   ctx.fillText(s, x, y);
 }
+
+/** Text on a tile, shrunk with the tile so it stays inside it. */
+const tileFont = (tile: number, max = 12) => Math.max(8, Math.min(max, Math.round(tile * 0.26)));
 
 /** A small dark tag: slot numbers, batch ages, hints. */
 function tag(ctx: CanvasRenderingContext2D, s: string, x: number, y: number, color: string = PAL.gold, size = 12): void {
@@ -164,11 +171,11 @@ export function draw(ctx: CanvasRenderingContext2D, view: View): void {
       if (!s) continue;
       const x = x0 + col * T;
       blit(ctx, view, structureKey(s, lookOf(view, i, s)), x, y);
-      if (s.kind === 'feeder') tag(ctx, String(feederSlot(shown, row)), x + 2, y + 2);
+      if (s.kind === 'feeder') tag(ctx, String(feederSlot(shown, row)), x + 2, y + 2, PAL.gold, tileFont(T));
       const roast = sim.roasting[i];
-      if (s.kind === 'roaster' && roast) tag(ctx, `in ${sim.T - roast.since}`, x + 2, y + T - 17, PAL.cream);
+      if (s.kind === 'roaster' && roast) tag(ctx, `in ${sim.T - roast.since}`, x + 2, y + T - tileFont(T) - 5, PAL.cream, tileFont(T));
       const inside = sim.springs[i]?.filter((it) => it !== null).length;
-      if (s.kind === 'spring' && inside) tag(ctx, `${inside}`, x + T - 18, y + 2, PAL.cream);
+      if (s.kind === 'spring' && inside) tag(ctx, `${inside}`, x + T - tileFont(T) - 6, y + 2, PAL.cream, tileFont(T));
       const pend = sim.pending[i];
       if (pend) blit(ctx, view, itemKey(pend.item), x + T * 0.5, y - T * 0.08, T * 0.55);
       if (s.kind === 'splitter') drawSplitterEdges(ctx, view, i, x, y);
@@ -196,7 +203,7 @@ export function draw(ctx: CanvasRenderingContext2D, view: View): void {
   for (let col = 0; col < COLS; col++) {
     const { x, y } = geo.tileXY(-1, col);
     blit(ctx, view, 'fixed:E', x, y);
-    tag(ctx, String(slotOf(shown, col)), x + 2, y + 2);
+    tag(ctx, String(slotOf(shown, col)), x + 2, y + 2, PAL.gold, tileFont(T));
     const item = sim.belts[layout.rows * COLS + col];
     if (item) blit(ctx, view, itemKey(item), x, y);
   }
@@ -318,17 +325,19 @@ function drawStools(ctx: CanvasRenderingContext2D, view: View): void {
       ctx.arc(cx, top + 8 + d / 2, d / 2 + 2, 0, Math.PI * 2);
       ctx.stroke();
     }
-    let y = top + 8 + d + 9;
-    text(ctx, st.label, cx, y, { size: 12, color: PAL.cream });
-    y += 15;
-    if (st.result) text(ctx, RESULT_MARK[st.result], cx - T * 0.18, y, { size: 13, color: RESULT_COLOR[st.result] });
+    const fs = tileFont(T);
+    let y = top + 8 + d + fs * 0.75;
+    text(ctx, st.label, cx, y, { size: fs, color: PAL.cream });
+    y += fs + 3;
+    if (st.result) text(ctx, RESULT_MARK[st.result], cx - T * 0.18, y, { size: fs + 1, color: RESULT_COLOR[st.result] });
     if (st.cup) blit(ctx, view, itemKey(st.cup), cx - T * 0.02, y - T * 0.2, T * 0.4);
     // Happiness: one pip per loop in a row with their cup.
     const py = top + geo.band - 13;
+    const pip = Math.min(9, T / (HAPPY_LOOPS + 1));
     for (let k = 0; k < HAPPY_LOOPS; k++) {
-      const px = cx + (k - (HAPPY_LOOPS - 1) / 2) * 9;
+      const px = cx + (k - (HAPPY_LOOPS - 1) / 2) * pip;
       ctx.beginPath();
-      ctx.arc(px, py, 3, 0, Math.PI * 2);
+      ctx.arc(px, py, Math.min(3, pip / 3), 0, Math.PI * 2);
       if (k < st.happy) {
         ctx.fillStyle = st.happy >= HAPPY_LOOPS ? PAL.leaf : PAL.gold;
         ctx.fill();
@@ -341,33 +350,54 @@ function drawStools(ctx: CanvasRenderingContext2D, view: View): void {
   }
 }
 
-/** When rows are out of view, say so at the edge where they are. */
+/** When rows or columns are out of view, say so at the edge where they are, with a slim scroll bar. */
 function drawCameraHints(ctx: CanvasRenderingContext2D, view: View): void {
   const { geo } = view;
-  if (geo.maxCamY === 0) return;
-  const cx = geo.x0 + geo.floorW / 2;
-  const hidden = (n: number) => `${n} row${n === 1 ? '' : 's'}`;
-  const above = Math.floor((geo.maxCamY - geo.camY) / geo.tile);
-  const below = Math.floor(geo.camY / geo.tile);
+  const many = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
+  const tagW = (s: string) => ctx.measureText(s).width + 8;
   ctx.save();
   ctx.font = `13px ${BODY_FONT}`;
-  if (geo.camY < geo.maxCamY) {
-    const s = `▲ ${hidden(Math.max(1, above))} above · right-drag or scroll`;
-    tag(ctx, s, cx - (ctx.measureText(s).width + 8) / 2, PAD + 4, PAL.gold, 13);
+  if (geo.maxCamY > 0) {
+    // The middle of the floor in view.
+    const mid = (Math.max(geo.x0, PAD) + Math.min(geo.x0 + geo.floorW, geo.width - PAD)) / 2;
+    const above = Math.floor((geo.maxCamY - geo.camY) / geo.tile);
+    const below = Math.floor(geo.camY / geo.tile);
+    if (geo.camY < geo.maxCamY) {
+      const s = `▲ ${many(Math.max(1, above), 'row')} above · ${view.panHint}`;
+      tag(ctx, s, mid - tagW(s) / 2, PAD + 4, PAL.gold, 13);
+    }
+    if (geo.camY > 0) {
+      const s = `▼ ${many(Math.max(1, below), 'row')} below`;
+      tag(ctx, s, mid - tagW(s) / 2, geo.counterY - 22, PAL.gold, 13);
+    }
+    // A slim scroll bar beside the floor, or at the canvas's edge when the floor runs past it.
+    const trackX = Math.min(geo.x0 + geo.floorW + 4, geo.width - 6);
+    const trackH = geo.roomH;
+    const thumbH = Math.max(24, (trackH * geo.roomH) / (geo.rows * geo.tile));
+    const thumbY = PAD + (trackH - thumbH) * (1 - geo.camY / geo.maxCamY);
+    ctx.fillStyle = 'rgba(205, 189, 176, 0.18)';
+    ctx.fillRect(trackX, PAD, 4, trackH);
+    ctx.fillStyle = PAL.gold;
+    ctx.fillRect(trackX, thumbY, 4, thumbH);
   }
-  if (geo.camY > 0) {
-    const s = `▼ ${hidden(Math.max(1, below))} below`;
-    tag(ctx, s, cx - (ctx.measureText(s).width + 8) / 2, geo.counterY - 22, PAL.gold, 13);
+  if (geo.maxCamX > 0) {
+    const { left, right } = geo.hiddenCols;
+    const y = PAD + Math.max(24, geo.roomH / 2 - 8);
+    if (left > 0) tag(ctx, `◀ ${left}`, PAD + 2, y, PAL.gold, 13);
+    if (right > 0) {
+      const s = `${right} ▶`;
+      tag(ctx, s, geo.width - PAD - 2 - Math.max(17, tagW(s)), y, PAL.gold, 13);
+    }
+    // A slim scroll bar under the stools.
+    const trackW = geo.width - 2 * PAD;
+    const thumbW = Math.max(24, (trackW * trackW) / geo.floorW);
+    const thumbX = PAD + (trackW - thumbW) * (geo.camX / geo.maxCamX);
+    const trackY = geo.height - 6;
+    ctx.fillStyle = 'rgba(205, 189, 176, 0.18)';
+    ctx.fillRect(PAD, trackY, trackW, 4);
+    ctx.fillStyle = PAL.gold;
+    ctx.fillRect(thumbX, trackY, thumbW, 4);
   }
-  // A slim scroll bar beside the floor.
-  const trackX = geo.x0 + geo.floorW + 4;
-  const trackH = geo.roomH;
-  const thumbH = Math.max(24, (trackH * geo.roomH) / (geo.rows * geo.tile));
-  const thumbY = PAD + (trackH - thumbH) * (1 - geo.camY / geo.maxCamY);
-  ctx.fillStyle = 'rgba(205, 189, 176, 0.18)';
-  ctx.fillRect(trackX, PAD, 4, trackH);
-  ctx.fillStyle = PAL.gold;
-  ctx.fillRect(trackX, thumbY, 4, thumbH);
   ctx.restore();
 }
 
@@ -395,6 +425,23 @@ function drawEditing(ctx: CanvasRenderingContext2D, view: View, editor: Editor):
   }
   ctx.restore();
 
+  // The tile last tapped or clicked, while nothing is in hand.
+  const ins = view.inspect;
+  if (ins && !editor.hand) {
+    const { x, y } = ins.row === -2 ? { x: geo.x0 + ins.col * T, y: geo.bandY } : geo.tileXY(ins.row, ins.col);
+    const h = ins.row === -2 ? geo.band : T;
+    if (ins.row < 0 || (y + T > PAD && y < geo.counterY)) {
+      ctx.save();
+      ctx.strokeStyle = PAL.gold;
+      ctx.lineWidth = 3;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.roundRect(x + 2, y + 2, T - 4, h - 4, 8);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
   // Hover and the ghost of whatever is in hand.
   if (!view.hover || view.hover.row < -1) return;
   const ghost: Ghost | null = view.hover.row >= 0 ? editor.ghost(view.hover.row, view.hover.col) : null;
@@ -421,7 +468,7 @@ function drawEditing(ctx: CanvasRenderingContext2D, view: View, editor: Editor):
   if (ghost?.reason) {
     ctx.font = `15px ${BODY_FONT}`;
     const tw = ctx.measureText(ghost.reason).width;
-    const tx = Math.max(geo.x0, Math.min(x, geo.x0 + geo.floorW - tw - 14));
+    const tx = Math.max(Math.max(geo.x0, PAD), Math.min(x, Math.min(geo.x0 + geo.floorW, geo.width - PAD) - tw - 14));
     const ty = y < PAD + 30 ? y + T + 4 : y - 26;
     ctx.fillStyle = PAL.night;
     ctx.strokeStyle = PAL.line;

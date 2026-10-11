@@ -1,17 +1,15 @@
 // The panels around the floor: plain DOM, updated in place on every render.
-// The clock and its controls sit top right, the till bottom left, the build
-// palette bottom middle; less frequent things live in tabs on the right.
+// The clock and its controls, the till with its floor rows, the line of
+// messages under the palette, and the tabs. Where each goes depends on the
+// window (layout.ts); the panels themselves do not know.
 
 import { roastForTick } from '../sim/items';
 import { LOOP } from '../sim/tuning';
-import { ALL_PIECES, PIECE_LABEL, type PieceKind } from '../game/pieces';
-import { FLOOR_ROW_PRICE, PIECE_PRICE } from '../game/tuning';
-import { clockFace, spriteImg } from './art/dom';
+import { FLOOR_ROW_PRICE } from '../game/tuning';
+import { clockFace } from './art/dom';
+import { icon } from './art/icons';
 import { svgUrl } from './art/raster';
 import { el } from './el';
-import { pieceKey } from './hotkeys';
-import { pieceTipKey } from './tips';
-
 
 export interface PanelModel {
   T: number;
@@ -24,13 +22,9 @@ export interface PanelModel {
   milk: string;
   /** "3 seated", "all happy" and the like. */
   seated: string;
-  palette: { piece: PieceKind; locked: boolean; note: string }[];
-  inHand: PieceKind | 'group' | null;
   message: string;
   hoverInfo: string;
   bufferInfo: string;
-  canUndo: boolean;
-  canRedo: boolean;
   /** Why no floor row is for sale yet, or null if one is. */
   rowsLocked: string | null;
 }
@@ -39,28 +33,8 @@ export interface PanelActions {
   togglePause(): void;
   stepOnce(): void;
   setSpeed(n: number): void;
-  pick(piece: PieceKind): void;
   buyRow(): void;
-  undo(): void;
-  redo(): void;
 }
-
-/** The bottom line of the build panel when nothing on the floor is hovered. */
-const REFUND_HINT = 'Z deletes the piece under the cursor, with a full refund.';
-
-/** The sprite each palette piece is shown with. */
-export const PIECE_ICON: Record<PieceKind, string> = {
-  belt: 'belt:E',
-  plot: 'plot:S:1',
-  kettle: 'kettle:S:-',
-  well: 'well',
-  spring: 'spring:E',
-  chute: 'launch:E',
-  roaster: 'roaster:S:1',
-  door: 'door',
-  mixer: 'mixer:S',
-  splitter: 'splitter',
-};
 
 const ROAST_LEGEND: [string, number, number][] = [
   ['Light', 0, 3],
@@ -69,41 +43,43 @@ const ROAST_LEGEND: [string, number, number][] = [
 ];
 
 export class Panel {
-  /** Top right: the clock and the time controls. */
+  /** The clock and the time controls. */
   readonly clock: HTMLElement;
-  /** Bottom left: the till and how the shop is doing. */
+  /** The till, how the shop is doing, and floor rows for sale. */
   readonly tillCard: HTMLElement;
-  /** Bottom middle: the build palette. */
-  readonly build: HTMLElement;
+  /** The coins alone, for a narrow window's top bar. */
+  readonly coins = el('div', { className: 'coins' });
+  /** What just happened, and what is under the cursor or was last tapped. */
+  readonly info: HTMLElement;
 
   private dial = el('img', { className: 'dial', width: 104, height: 104, alt: 'The shop clock' });
   private dialTick: number | null | undefined = undefined;
-  private tickBig = el('div', { className: 'big' });
-  private tickSmall = el('div', { className: 'muted' });
-  private playBtn = el('button', { className: 'primary' });
-  private stepBtn = el('button', { textContent: 'Step' });
-  private speed = el('select');
+  private tickBig = el('div', { className: 'big tick-big' });
+  private tickSmall = el('div', { className: 'muted tick-small' });
+  private playLabel = el('span', { className: 'btn-label' });
+  private playIcon = el('span', { className: 'btn-icon' });
+  private playBtn = el('button', { className: 'primary play' }, this.playIcon, this.playLabel);
+  private stepBtn = el('button', { className: 'step' }, el('span', { className: 'btn-icon' }, icon('step', 18)), el('span', { className: 'btn-label', textContent: 'Step' }));
+  private speed = el('select', { className: 'speed' });
   private till = el('div', { className: 'big' });
   private gears = el('div', { className: 'muted' });
   private seated = el('div');
   private spills = el('div', { className: 'muted' });
   private milk = el('div', { className: 'muted' });
-  private paletteBtns = new Map<PieceKind, { btn: HTMLButtonElement; label: HTMLSpanElement; icon: HTMLImageElement; unknown: HTMLSpanElement; info: HTMLSpanElement }>();
-  private rowBtn = el('button', { textContent: `Buy a row · ${FLOOR_ROW_PRICE}` });
-  private undoBtn = el('button', { textContent: 'Undo' });
-  private redoBtn = el('button', { textContent: 'Redo' });
+  private rowBtn = el('button', { className: 'row-btn', textContent: `Buy a row · ${FLOOR_ROW_PRICE}` });
   private message = el('div', { className: 'message' });
   private hover = el('div', { className: 'hover' });
-  private bufferInfo = el('div', { className: 'muted' });
+  private bufferInfo = el('div', { className: 'muted buffer-info' });
+  private running: boolean | null = null;
 
-  constructor(actions: PanelActions) {
+  constructor(actions: PanelActions, private readonly refundHint: string) {
     this.playBtn.onclick = () => actions.togglePause();
     this.stepBtn.onclick = () => actions.stepOnce();
+    this.stepBtn.setAttribute('aria-label', 'Step one tick');
     for (const n of [1, 2, 4]) this.speed.append(el('option', { value: String(n), textContent: `${n}×` }));
+    this.speed.setAttribute('aria-label', 'Speed');
     this.speed.onchange = () => actions.setSpeed(Number(this.speed.value));
     this.rowBtn.onclick = () => actions.buyRow();
-    this.undoBtn.onclick = () => actions.undo();
-    this.redoBtn.onclick = () => actions.redo();
 
     const legend = el(
       'div',
@@ -117,7 +93,7 @@ export class Panel {
         'div',
         { className: 'clock-top' },
         this.dial,
-        el('div', { className: 'clock-text' }, el('div', { className: 'muted' }, 'Tick'), this.tickBig, legend, this.tickSmall),
+        el('div', { className: 'clock-text' }, el('div', { className: 'muted tick-label' }, 'Tick'), this.tickBig, legend, this.tickSmall),
       ),
       el('div', { className: 'controls' }, this.playBtn, this.stepBtn, this.speed),
     );
@@ -125,44 +101,13 @@ export class Panel {
     this.tillCard = el(
       'div',
       { className: 'card till-card' },
-      el('div', { className: 'till-line' }, this.till, this.gears),
+      el('div', { className: 'till-line' }, this.till, this.gears, this.rowBtn),
       this.seated,
       this.spills,
       this.milk,
     );
 
-    // Each piece shows its number key and, once unlocked, a mark that it has a
-    // tooltip; a locked piece is only a question mark. Locked buttons are not
-    // disabled, so they still get hover, and a click says why nothing happens.
-    const palette = el('div', { className: 'palette' });
-    ALL_PIECES.forEach((piece, i) => {
-      const label = el('span', { className: 'piece-label' });
-      const icon = spriteImg(PIECE_ICON[piece], 40);
-      const unknown = el('span', { className: 'piece-unknown', textContent: '?' });
-      const info = el('span', { className: 'piece-info', textContent: 'i' });
-      const btn = el('button', { className: 'piece' }, el('span', { className: 'piece-key', textContent: pieceKey(i) ?? '' }), info, icon, unknown, label);
-      btn.onclick = () => actions.pick(piece);
-      this.paletteBtns.set(piece, { btn, label, icon, unknown, info });
-      palette.append(btn);
-    });
-    this.build = el(
-      'div',
-      { className: 'card build' },
-      palette,
-      el(
-        'div',
-        { className: 'build-side' },
-        el('div', { className: 'row' }, this.rowBtn, this.undoBtn, this.redoBtn),
-        this.message,
-        this.hover,
-        this.bufferInfo,
-      ),
-    );
-  }
-
-  /** The palette buttons of these pieces, for the tour to point at. */
-  pieceButtons(pieces: readonly PieceKind[]): HTMLElement[] {
-    return pieces.map((p) => this.paletteBtns.get(p)!.btn);
+    this.info = el('div', { className: 'info' }, this.message, this.hover, this.bufferInfo);
   }
 
   update(m: PanelModel): void {
@@ -175,35 +120,27 @@ export class Panel {
     }
     this.tickBig.textContent = t === null ? '– / 12' : `${t} / 12`;
     this.tickSmall.textContent = t === null ? 'not started' : `${roastForTick(t)} roast · T = ${shown}`;
-    this.playBtn.textContent = m.running ? 'Pause' : 'Play';
+    if (m.running !== this.running) {
+      this.running = m.running;
+      this.playLabel.textContent = m.running ? 'Pause' : 'Play';
+      this.playIcon.replaceChildren(icon(m.running ? 'pause' : 'play', 18));
+      this.playBtn.setAttribute('aria-label', m.running ? 'Pause' : 'Play');
+    }
     this.stepBtn.disabled = m.running;
     this.speed.value = String(m.speed);
     this.till.textContent = `${m.till.toLocaleString()} coins`;
+    this.coins.textContent = `${m.till.toLocaleString()} coins`;
     this.gears.textContent = `· ${m.gears.toLocaleString()} gear${m.gears === 1 ? '' : 's'}`;
     this.seated.textContent = m.seated;
     this.spills.textContent = `Spills: ${m.spillsThisLoop} this loop, ${m.spillsLastLoop} last loop`;
     this.milk.textContent = m.milk;
-    for (const p of m.palette) {
-      const { btn, label, icon, unknown, info } = this.paletteBtns.get(p.piece)!;
-      label.textContent = p.locked ? '' : `${PIECE_LABEL[p.piece]} · ${PIECE_PRICE[p.piece]}${p.note ? ' · ' + p.note : ''}`;
-      icon.hidden = p.locked;
-      info.hidden = p.locked;
-      unknown.hidden = !p.locked;
-      btn.classList.toggle('locked', p.locked);
-      btn.setAttribute('aria-disabled', String(p.locked));
-      btn.setAttribute('aria-label', p.locked ? 'A piece not unlocked yet' : PIECE_LABEL[p.piece]);
-      btn.dataset.tip = pieceTipKey(p.piece, p.locked);
-      btn.classList.toggle('active', m.inHand === p.piece);
-    }
     // A row not for sale yet is not disabled, so it still gets its tooltip, and a click says why.
     this.rowBtn.classList.toggle('locked', m.rowsLocked !== null);
     this.rowBtn.setAttribute('aria-disabled', String(m.rowsLocked !== null));
     this.rowBtn.dataset.tip = m.rowsLocked === null ? 'row' : 'row:locked';
-    this.undoBtn.disabled = !m.canUndo;
-    this.redoBtn.disabled = !m.canRedo;
     this.bufferInfo.textContent = m.bufferInfo;
     this.message.textContent = m.message;
-    this.hover.textContent = m.hoverInfo || REFUND_HINT;
+    this.hover.textContent = m.hoverInfo || this.refundHint;
   }
 }
 
@@ -212,20 +149,25 @@ export class Tabs {
   readonly root = el('div', { className: 'card tabs' });
   private buttons = new Map<string, HTMLButtonElement>();
   private panes = new Map<string, HTMLElement>();
+  private body = el('div', { className: 'tab-body' });
 
-  constructor(tabs: { id: string; label: string; content: Node[] }[]) {
+  constructor(
+    tabs: { id: string; label: string; content: Node[] }[],
+    private readonly onSelect: (id: string) => void = () => {},
+  ) {
     const bar = el('div', { className: 'tab-bar' });
-    const body = el('div', { className: 'tab-body' });
+    bar.setAttribute('role', 'tablist');
     for (const t of tabs) {
       const b = el('button', { className: 'tab', textContent: t.label });
+      b.setAttribute('role', 'tab');
       b.onclick = () => this.select(t.id);
       this.buttons.set(t.id, b);
       bar.append(b);
       const pane = el('div', { className: 'pane' }, ...t.content);
       this.panes.set(t.id, pane);
-      body.append(pane);
+      this.body.append(pane);
     }
-    this.root.append(bar, body);
+    this.root.append(bar, this.body);
     this.select(tabs[0].id);
   }
 
@@ -238,34 +180,61 @@ export class Tabs {
   }
 
   select(id: string): void {
+    if (id !== this.current) this.body.scrollTop = 0;
     this.current = id;
-    for (const [k, b] of this.buttons) b.classList.toggle('active', k === id);
+    for (const [k, b] of this.buttons) {
+      b.classList.toggle('active', k === id);
+      b.setAttribute('aria-selected', String(k === id));
+    }
     for (const [k, p] of this.panes) p.hidden = k !== id;
+    this.onSelect(id);
   }
 }
 
-/** The tour, the keys, and credits for the fonts. */
-export function helpPane(startTour: () => void): HTMLElement[] {
+/** The mouse and the keys. */
+const KEYS = [
+  'Click a palette piece, or press its number key (1 to 9, then 0), then click the floor. Drag to lay belts.',
+  'Hover a palette piece for its rules, and an underlined drink for how it is made. The Guide tab has them all.',
+  'R turn · F flip · Esc or right-click put down',
+  'Z delete, with a full refund · X cut · C copy (the tile under the cursor, or the one last clicked)',
+  'Shift+drag box select, then Z, Ctrl+X, Ctrl+C',
+  'Ctrl+V pick up the buffer · Ctrl+wheel older entries',
+  'Ctrl+Z undo · Ctrl+Y redo',
+  'Space pause · . step one tick',
+  'Right-drag, middle-drag or the mouse wheel: look around a big floor',
+  'The tool bar beside the floor does all of this with a click, too.',
+];
+
+/** Fingers. */
+const TOUCH = [
+  'Tap a palette piece, then tap the floor to put it down. Swipe across the palette, or use its arrows, for more pieces.',
+  'Holding a piece, touch the floor and slide to aim: it goes down where you lift your finger. Lift off the floor to put nothing down.',
+  'Holding a belt, drag to lay a run of them that turns to follow your finger.',
+  'Turn, Flip and Put down are in the tool bar while you hold something.',
+  'With nothing in hand, drag to look around, and tap a tile to see what is on it. Then Delete (a full refund), Cut or Copy it.',
+  'Two fingers drag to look around, or pinch to zoom, at any time.',
+  'Select, then drag a box: Delete, Cut and Copy work on all of it. Paste picks up what you last cut, copied or deleted.',
+  'Press and hold a palette piece or a tool for what it does, and tap an underlined drink for how it is made. The Guide tab has them all.',
+];
+
+/** What the floor's marks mean, for any player. */
+const MARKS = [
+  'Splitter edges: yellow outputs, green where the next item goes, red where it would spill.',
+  'A stool reads t9 · s9: its regular wants a cup on tick 9, which is the cup in slot 9. ● Just in Time, ◐ served, ✕ a miss.',
+];
+
+/** The tour, the controls for this device first, and credits for the fonts. */
+export function helpPane(startTour: () => void, touch: boolean): HTMLElement[] {
   const tour = el('button', { className: 'primary', textContent: 'Take the tour' });
   tour.onclick = startTour;
+  const list = (lines: string[]) => el('ul', { className: 'keys' }, ...lines.map((t) => el('li', {}, t)));
+  const [first, firstName, other, otherName] = touch ? [TOUCH, 'Touch', KEYS, 'Mouse and keys'] : [KEYS, 'Mouse and keys', TOUCH, 'Touch'];
   return [
     el('div', { className: 'help-tour' }, tour, el('span', { className: 'muted' }, 'A few short steps: the clock, slots and your first four pieces.')),
-    el(
-      'ul',
-      { className: 'keys' },
-      ...[
-        'Click a palette piece, or press its number key (1 to 9, then 0), then click the floor. Drag to lay belts.',
-        'Hover a palette piece for its rules, and an underlined drink for how it is made',
-        'R turn · F flip · Esc or right-click put down',
-        'Z delete, with a full refund · X cut · C copy (the tile under the cursor)',
-        'Shift+drag box select, then Z, Ctrl+X, Ctrl+C',
-        'Ctrl+V pick up the buffer · Ctrl+wheel older entries',
-        'Ctrl+Z undo · Ctrl+Y redo',
-        'Space pause · . step one tick',
-        'Right-drag, middle-drag or the mouse wheel: look around a tall floor',
-        'Splitter edges: yellow outputs, green where the next item goes, red where it would spill',
-      ].map((t) => el('li', {}, t)),
-    ),
+    el('h3', { className: 'help-head' }, firstName),
+    list(first),
+    list(MARKS),
+    el('details', {}, el('summary', {}, otherName), list(other)),
     el(
       'p',
       { className: 'credits' },

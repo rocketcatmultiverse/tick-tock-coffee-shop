@@ -2,7 +2,9 @@
 // the first four pieces, the feeder, the slots, the till and the Help tab.
 // It is offered once per shop, can be skipped at any step, and can be taken
 // again from the Help tab. The floor keeps running and stays clickable
-// underneath. Every number in the words comes from the tuning files.
+// underneath. Every number in the words comes from the tuning files. On a
+// touch screen the words say tap rather than click and name no keys, and in a
+// narrow window they find the Help tab in the menu (docs/QUESTIONS.md, Q71).
 
 import type { Roast } from '../sim/types';
 import { BREW_TIME, GROWTH, LOOP, WELL_TICK } from '../sim/tuning';
@@ -12,7 +14,7 @@ import { FLOOR_ROW_PRICE, HAPPY_LOOPS, ROWS_FOR_SALE_AFTER_HAPPY, START_COINS, S
 import { spriteImg } from './art/dom';
 import { el } from './el';
 import { pieceKey } from './hotkeys';
-import { PIECE_ICON } from './panel';
+import { PIECE_ICON } from './palette';
 import { tickRange } from './tips';
 
 const ticks = (n: number) => `${n} tick${n === 1 ? '' : 's'}`;
@@ -25,6 +27,12 @@ export interface StoolExample {
 }
 
 export type TourStepId = 'clock' | 'regular' | 'pieces' | 'feeder' | 'slots' | 'coins' | 'go';
+
+/** How the player plays: by touch or with a mouse and keys, and whether the tabs are in the menu. */
+export interface TourWords {
+  touch: boolean;
+  menu: boolean;
+}
 
 export interface TourText {
   id: TourStepId;
@@ -51,22 +59,26 @@ const rowsWait =
   ROWS_FOR_SALE_AFTER_HAPPY === 1 ? 'your first regular is happy' : `your first ${ROWS_FOR_SALE_AFTER_HAPPY} regulars are happy`;
 
 /** The words of every step. Pure, so the tests can read them. */
-export function tourText(stool: StoolExample): TourText[] {
+export function tourText(stool: StoolExample, words: TourWords = { touch: false, menu: false }): TourText[] {
   const key = (p: PieceKind) => pieceKey(ALL_PIECES.indexOf(p));
+  const { touch, menu } = words;
+  const help = menu ? 'The Help tab, in the menu, has' : 'The Help tab has';
   return [
     {
       id: 'clock',
       title: 'The clock',
       lines: [
         `The shop runs on a clock of ${LOOP} ticks, 0 to ${LOOP - 1}, one a second, then round again. Everything on the floor happens on a tick.`,
-        'Space pauses it and . steps one tick, so you can watch a line work. You can build while it runs or while it is paused.',
+        touch
+          ? 'Pause stops it and Step moves it on one tick, so you can watch a line work. You can build while it runs or while it is paused.'
+          : 'Space pauses it and . steps one tick, so you can watch a line work. You can build while it runs or while it is paused.',
       ],
     },
     {
       id: 'regular',
       title: 'Your regulars',
       lines: [
-        'This card shows the newest regular: what they drink, and the tick they want it on. Hover the underlined drink to see how it is made.',
+        `This card shows the newest regular: what they drink, and the tick they want it on. ${touch ? 'Tap' : 'Hover'} the underlined drink to see how it is made.`,
         `A regular served ${HAPPY_LOOPS} loops in a row is happy. Once everyone is happy, the next regular walks in.`,
       ],
     },
@@ -74,11 +86,13 @@ export function tourText(stool: StoolExample): TourText[] {
       id: 'pieces',
       title: 'Your first four pieces',
       lines: [
-        'Click a piece, or press its number key, then click the floor. Press R to turn it first: a machine puts out on the side it faces. Hover a piece for all its rules.',
+        touch
+          ? 'Tap a piece, then tap the floor. Turn it first with Turn in the tool bar: a machine puts out on the side it faces. Press and hold a piece for all its rules.'
+          : 'Click a piece, or press its number key, then click the floor. Press R to turn it first: a machine puts out on the side it faces. Hover a piece for all its rules.',
       ],
       pieces: LINE_ORDER.filter((p) => START_PIECES.includes(p)).map((piece) => ({
         piece,
-        line: `${PIECE_LABEL[piece]}, key ${key(piece)}: ${PIECE_LINE[piece]}`,
+        line: `${PIECE_LABEL[piece]}${touch ? '' : `, key ${key(piece)}`}: ${PIECE_LINE[piece]}`,
       })),
     },
     {
@@ -103,7 +117,7 @@ export function tourText(stool: StoolExample): TourText[] {
       title: 'Coins',
       lines: [
         `A new shop has ${START_COINS} coins. Pieces cost coins, and regulars pay for their cups.`,
-        'Deleting a piece gives back every coin it cost: hover it and press Z. So try things, and move them about freely.',
+        `Deleting a piece gives back every coin it cost: ${touch ? 'tap it, then Delete' : 'hover it and press Z'}. So try things, and move them about freely.`,
         `Floor rows cost ${FLOOR_ROW_PRICE} and are not given back. They are for sale once ${rowsWait}; the ${START_ROWS} rows you start with are plenty until then.`,
       ],
     },
@@ -112,7 +126,7 @@ export function tourText(stool: StoolExample): TourText[] {
       title: 'Your turn',
       lines: [
         'Build a line: a well, a plot and a kettle, then into the feeder, with belts where you need them. Time it so the cup rides in the slot your regular wants.',
-        'The Help tab has every key, and this tour again.',
+        touch ? `${help} every control, and this tour again. The Guide tab has every rule.` : `${help} every key, and this tour again. The Guide tab has every rule.`,
       ],
     },
   ];
@@ -133,11 +147,15 @@ export interface TourTargets {
   clock: HTMLElement;
   newcomer: HTMLElement;
   /** The palette buttons of the first pieces. */
-  pieces: HTMLElement[];
-  till: HTMLElement;
-  help: HTMLElement;
+  pieces(): HTMLElement[];
+  /** The coins: the till, or in a narrow window the coins in the top bar. */
+  till(): HTMLElement;
+  /** Where the Help tab is: its button, or the menu that opens it. */
+  help(): HTMLElement;
   /** The feeder column, or the counter with its stools, on the floor canvas. */
   floor(part: 'feeder' | 'counter'): Box | null;
+  /** Get the page ready for a step, such as opening the menu that holds its target; null when the tour ends. */
+  prepare(step: TourStepId | null): void;
 }
 
 interface TourStep {
@@ -155,17 +173,17 @@ const boxOf = (...els: HTMLElement[]): Box | null => {
   return { left, top, width: Math.max(...rects.map((r) => r.right)) - left, height: Math.max(...rects.map((r) => r.bottom)) - top };
 };
 
-function steps(t: TourTargets, stool: StoolExample): TourStep[] {
+function steps(t: TourTargets, stool: StoolExample, words: TourWords): TourStep[] {
   const at: Record<TourStepId, Omit<TourStep, 'text'>> = {
     clock: { target: () => boxOf(t.clock), side: 'left' },
     regular: { target: () => boxOf(t.newcomer), side: 'left' },
-    pieces: { target: () => boxOf(...t.pieces), side: 'above' },
+    pieces: { target: () => boxOf(...t.pieces()), side: 'above' },
     feeder: { target: () => t.floor('feeder'), side: 'right' },
     slots: { target: () => t.floor('counter'), side: 'above' },
-    coins: { target: () => boxOf(t.till), side: 'above' },
-    go: { target: () => boxOf(t.help), side: 'left' },
+    coins: { target: () => boxOf(t.till()), side: 'above' },
+    go: { target: () => boxOf(t.help()), side: 'left' },
   };
-  return tourText(stool).map((text) => ({ text, ...at[text.id] }));
+  return tourText(stool, words).map((text) => ({ text, ...at[text.id] }));
 }
 
 /** Space between the spotlight and what it lights, between it and the card, and from the window's edges. */
@@ -204,8 +222,13 @@ export class Tour {
     if (e.key === 'Escape') this.end();
   };
 
-  constructor(targets: TourTargets, stool: StoolExample, private readonly onEnd: () => void = () => {}) {
-    this.steps = steps(targets, stool);
+  constructor(
+    private readonly targets: TourTargets,
+    stool: StoolExample,
+    words: TourWords,
+    private readonly onEnd: () => void = () => {},
+  ) {
+    this.steps = steps(targets, stool, words);
     this.card.setAttribute('role', 'dialog');
     this.card.setAttribute('aria-label', 'Tour');
   }
@@ -226,12 +249,14 @@ export class Tour {
     window.removeEventListener('keydown', this.onKey);
     this.spot.remove();
     this.card.remove();
+    this.targets.prepare(null);
     this.onEnd();
   }
 
   private show(k: number): void {
     this.k = k;
     const { text } = this.steps[k];
+    this.targets.prepare(text.id);
     const last = k === this.steps.length - 1;
     const back = el('button', { textContent: 'Back', hidden: k === 0 });
     const next = el('button', { className: 'primary', textContent: last ? 'Start playing' : 'Next' });
@@ -277,7 +302,7 @@ export class Tour {
 }
 
 /** Offered once per shop: take the tour now, or skip it. Either way it is not offered again. */
-export function offerTour(stepCount: number, choose: { take(): void; skip(): void }): void {
+export function offerTour(stepCount: number, choose: { take(): void; skip(): void }, menu = false): void {
   const take = el('button', { className: 'primary', textContent: 'Show me around' });
   const skip = el('button', { textContent: 'Skip the tour' });
   const card = el(
@@ -289,7 +314,7 @@ export function offerTour(stepCount: number, choose: { take(): void; skip(): voi
       {},
       `New here? A short tour shows how the shop works in ${stepCount} quick steps: the clock, slots, and your first four pieces. The floor keeps running while you read.`,
     ),
-    el('p', { className: 'muted' }, 'You can take it again any time from the Help tab.'),
+    el('p', { className: 'muted' }, `You can take it again any time from the Help tab${menu ? ', in the menu' : ''}.`),
     el('div', { className: 'row' }, skip, take),
   );
   const overlay = el('div', { className: 'overlay' }, card);

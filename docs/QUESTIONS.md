@@ -622,3 +622,71 @@ a light tour offered to new shops and to saves that have not had it. *Done as:*
   tab (the Keys tab, renamed) runs it again. Not offered on a visit.
 `src/ui/storage.ts`, `src/ui/slots.ts`, `src/ui/tutorial.ts`,
 `src/game/save.ts`.
+
+**Q71. Phones, touch and small windows.** *Your request, on the
+mobile-support branch:* the game on phones with a control scheme fit for
+them, keeping every feature (box select optional), the tour and the save
+slots; a more responsive layout for small desktop windows, still one screen;
+the floor shrinking to a minimum tile and scrolling its columns as it does
+its rows; the palette in pages if need be; and the tooltips available without
+hover, perhaps as an encyclopedia. This replaces "Target a desktop browser
+with mouse and keyboard. No mobile work." in CLAUDE.md. *Done as:*
+- *three layouts, chosen by the window (`layoutFor`):* **wide** (at least
+  960 by 560) is Spec 4's one screen: the floor with a tool bar down its
+  left, the palette and the messages under it, and the clock, the till, the
+  newest regular and the tabs in the right column. The till moved from the
+  bottom bar into the column so the palette has the width to show all ten
+  pieces from about 1024 pixels up. **tall** (narrower than 1.2 times its
+  height) puts the clock and the menu along the top and the coins, messages,
+  tool bar and palette under the floor. **flat** (anything else smaller) puts
+  them in a column right of the floor. In tall and flat the side column is a
+  drawer opened from the menu; the clock keeps running behind it. The
+  panels are built once and moved between layouts, so nothing is lost when a
+  phone turns. *Assumed:* Spec 4's "one screen with the floor on the left and
+  a side panel on the right" holds for wide; a phone gets the drawer;
+- *the floor:* tiles are never fitted smaller than 32 pixels with a mouse or
+  40 with a finger. A floor too wide for that scrolls sideways, counter and
+  stools with it, with "◀ 3" / "4 ▶" hints and a scroll bar under the stools
+  like the rows' own. When it scrolls sideways anyway it may grow up to 1.2
+  times the smallest tile to fill a tall canvas. Pinching zooms between 24
+  and 112 pixels about the fingers (not on desktop, where Ctrl+wheel is
+  still the paste buffer). A drag that builds or selects near the floor's
+  edge moves the camera on, for mouse and finger alike;
+- *touch:* with nothing in hand a finger drags to look around, and a tap
+  inspects a tile (outlined in gold; its line is the hover line) or names the
+  cat. Holding a belt, a drag lays a run as with the mouse, and a tap lays
+  one. Holding anything else, the ghost follows the finger and the piece
+  goes down where it lifts; lifting off the floor puts nothing down. Two
+  fingers always look around and pinch, and a second finger landing cancels
+  what the first had started, keeping any belts already laid. *Assumed:*
+  placing on lift, not on touch, so a finger can see the ghost and the reason
+  a tile is refused before committing;
+- *the tool bar:* every editing key as a button, for touch and mouse alike:
+  Turn, Flip, Put down, Older and Newer (the paste buffer, for Ctrl+wheel),
+  and Rules while holding something; Select, Delete, Cut, Copy and Paste
+  while not; Undo and Redo always. Delete, Cut and Copy act on the box if
+  there is one, else on the tile last tapped or clicked. **Box select is
+  kept:** Select, then drag. Seven buttons at most, so it fits across a
+  320-pixel phone. The keys still work, and Z, X and C now also act on the
+  tile last clicked when the cursor is off the floor;
+- *the palette:* as many pieces a page as fit, with arrows either side and
+  a swipe on touch; picking a piece by its key turns to its page;
+- *tooltips without hover:* press and hold a palette piece, a tool or the
+  Buy a row button; tap an underlined drink. A finger's tooltip stays until
+  the next touch, and the hold does not also pick the piece. A new **Guide**
+  tab holds every tooltip: each unlocked piece (still-locked ones stay a
+  "?"), each drink a regular here orders with who orders it, floor rows, and
+  what the floor's marks mean. Rules in the tool bar opens it at the piece in
+  hand;
+- *words:* on a touch screen (`pointer: coarse`) the tour, the Help tab, the
+  tooltips, the hover line and the camera hints say tap and name no keys,
+  and the palette hides its number keys. In tall and flat the tour opens the
+  drawer for the newest regular's step and points at the menu for Help;
+- *also:* the morning report, the tour offer, the spoiler warning, the tour
+  card and the slot screen fit a phone; hover colours only where there is
+  hover; no double-tap zoom, text selection or long-press menus on the
+  game's controls; safe-area insets for notched phones.
+`src/ui/layout.ts`, `src/ui/input.ts`, `src/ui/tools.ts`,
+`src/ui/palette.ts`, `src/ui/guide.ts`, `src/ui/tooltip.ts`,
+`src/ui/geometry.ts`, `src/ui/render.ts`, `src/ui/panel.ts`,
+`src/ui/tutorial.ts`, `src/ui/main.ts`, `src/ui/style.css`.

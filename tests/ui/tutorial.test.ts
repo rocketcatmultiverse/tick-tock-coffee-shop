@@ -36,6 +36,30 @@ describe('The tour', () => {
     expect(steps.find((s) => s.id === 'slots')!.lines.join(' ')).toContain('t11 · s7');
   });
 
+  it('on a touch screen, says tap and names no keys (Q71)', () => {
+    const touch = tourText(STOOL, { touch: true, menu: true });
+    expect(touch.map((s) => s.id)).toEqual(steps.map((s) => s.id));
+    for (const s of touch) {
+      for (const line of all(s)) {
+        expect(line, s.id).not.toMatch(/\bkey\b|\bSpace\b|\bclick\b|\bHover\b|\bpress Z\b/i);
+        expect(line, s.id).not.toMatch(/undefined|NaN|\$\{|null/);
+      }
+    }
+    const text = (id: string) => all(touch.find((s) => s.id === id)!).join(' ');
+    expect(text('pieces')).toMatch(/Tap a piece, then tap the floor/);
+    expect(text('coins')).toMatch(/tap it, then Delete/);
+    expect(text('regular')).toMatch(/Tap the underlined drink/);
+    // Still in the order a line runs.
+    expect(touch.find((s) => s.id === 'pieces')!.pieces!.map((p) => p.piece)).toEqual(['well', 'plot', 'kettle', 'belt']);
+  });
+
+  it('finds the Help tab in the menu when the tabs are in the drawer', () => {
+    const go = (words: { touch: boolean; menu: boolean }) => all(tourText(STOOL, words).find((s) => s.id === 'go')!).join(' ');
+    expect(go({ touch: false, menu: false })).toContain('The Help tab has every key');
+    expect(go({ touch: false, menu: true })).toContain('The Help tab, in the menu, has every key');
+    expect(go({ touch: true, menu: true })).toContain('The Help tab, in the menu, has every control');
+  });
+
   it('says deleting gives every coin back, and that rows do not', () => {
     const coins = steps.find((s) => s.id === 'coins')!.lines.join(' ');
     expect(coins).toContain(`${START_COINS} coins`);

@@ -44,7 +44,7 @@ A browser puzzle-automation game for a two-week game jam: a cozy alchemical coff
 - Build in the order of "Spec 7: build order" and stop at the step you were asked to stop at.
 - The art pass of step 7 is in: sprites are SVG in `src/ui/art/`, in the canvas's style. Still no sound, no animation polish, no submission page, and no features that are not in the spec.
 - Dependencies are TypeScript, Vite and Vitest. Ask before adding anything else.
-- Target a desktop browser with mouse and keyboard. No mobile work.
+- Target desktop browsers with mouse and keyboard, and phones and tablets by touch (docs/QUESTIONS.md, Q71). Every feature works both ways.
 
 ## Git
 
