@@ -2,28 +2,31 @@ import './style.css';
 import { clockTick, counterIndex, feederSlot, isPresent, itemName, slotOf, splitterNext, splitterOutputs, structureToken, tileIndex } from '../sim';
 import { MILK_TICK } from '../sim/tuning';
 import type { Layout, Roast } from '../sim/types';
-import { ALL_PIECES } from '../game/pieces';
+import { ALL_PIECES, pieceOf } from '../game/pieces';
 import { applyOffline } from '../game/offline';
-import { type ShopStats, decodeShare, isBehind, progressOf, shopStats, shopTitle, visitShop } from '../game/share';
-import { Shop } from '../game/shop';
+import { saveShop } from '../game/save';
+import { type Progress, type ShopStats, decodeShare, isBehind, progressOf, shopStats, shopTitle, visitShop } from '../game/share';
+import { type RowRefund, Shop } from '../game/shop';
 import { type StripCell, counterStrip } from '../game/strip';
-import { HAPPY_LOOPS } from '../game/tuning';
+import { HAPPY_LOOPS, PIECE_PRICE, START_COINS, START_PIECES } from '../game/tuning';
 import { REGULARS } from '../levels/regulars';
 import { catSpot } from './cat';
 import { CatCard } from './catCard';
 import { RegularsPanel } from './regularsPanel';
 import { SpriteBank } from './art/raster';
 import { Editor } from './editor';
-import { Geometry, type Spot } from './geometry';
+import { Geometry, PAD, type Spot } from './geometry';
 import { bindInput } from './input';
 import { el } from './el';
-import { Panel, Tabs, keysPane } from './panel';
+import { Panel, Tabs, helpPane } from './panel';
 import { showMorningReport } from './morningReport';
 import { type StoolView, type View, draw } from './render';
 import { ShareCard, VisitBanner, leaveVisit, showSpoilerWarning } from './share';
-import { clearSave, readSave, writeSave } from './storage';
+import { downloadSave, showSlotScreen } from './slots';
+import { SLOTS, migrateLegacySave, openSlot, writeSave } from './storage';
 import { tipContent } from './tips';
 import { Tooltip } from './tooltip';
+import { type Box, type StoolExample, TOUR_STEPS, Tour, offerTour } from './tutorial';
 
 /** How often the shop is saved while open, in milliseconds. */
 const AUTOSAVE_MS = 2000;
@@ -31,6 +34,18 @@ const AUTOSAVE_MS = 2000;
 const NOTES_KEPT = 30;
 
 const WORD = { justInTime: 'Just in Time', served: 'served', miss: 'missed' } as const;
+
+const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
+
+/** What a shop opens: the player's own, from a save slot, or someone else's from a share link. */
+type Opening = { slot: number } | { visit: Shop };
+
+/** What taking back an old save's early rows did, as a line for the happenings; `why` says when rows are for sale. */
+function refundNote(r: RowRefund, why: string): string {
+  const pieces = r.pieces ? `, with the ${plural(r.pieces, 'piece')} on ${r.rows === 1 ? 'it' : 'them'}` : '';
+  const rows = r.rows === 1 ? 'the floor row' : `the ${r.rows} floor rows`;
+  return `${why}, so ${rows} bought before then went back, refunded in full${pieces}: ${r.coins} coins.`;
+}
 
 class App {
   readonly shop: Shop;
@@ -67,20 +82,27 @@ class App {
   /** In someone else's shop, opened from a share link: the banner with the way back. */
   private visitBanner: VisitBanner | null = null;
 
-  private resetting = false;
+  /** The save slot this shop is kept in; null while visiting someone else's. */
+  private readonly slot: number | null;
+  private leaving = false;
+  private tour: Tour | null = null;
 
   /**
-   * Opens the player's own shop from the save, or `visit`: someone else's shop
-   * from a share link, which plays as usual and is never saved.
+   * Opens the player's own shop from a save slot (a new one if the slot is
+   * empty), or someone else's shop from a share link, which plays as usual
+   * and is never saved.
    */
-  constructor(root: HTMLElement, debug: boolean, visit: Shop | null = null, notice = '') {
-    const loaded = visit ? null : readSave(REGULARS, debug);
+  constructor(root: HTMLElement, debug: boolean, opening: Opening, notice = '') {
+    const visit = 'visit' in opening ? opening.visit : null;
+    this.slot = 'slot' in opening ? opening.slot : null;
+    const loaded = this.slot === null ? null : openSlot(REGULARS, debug, this.slot);
     this.shop = visit ?? loaded?.shop ?? new Shop({ defs: REGULARS, debug });
     if (visit) this.notes.push(`Visiting ${shopTitle(visit.shopName)}: the floor starts empty and fills within a loop or two. Nothing here is saved.`);
     else this.notes.push(loaded ? 'Welcome back. The floor starts empty and fills again within a loop or two.' : `${REGULARS[0].name} walks in: "${REGULARS[0].intro}"`);
+    this.editor = new Editor(this.shop);
+    if (loaded) this.fixOldSave();
     if (notice) this.notes.unshift(notice);
     const report = loaded ? applyOffline(this.shop, loaded.lastSeen, Date.now()) : null;
-    this.editor = new Editor(this.shop);
     this.ctx = this.canvas.getContext('2d')!;
     this.panel = new Panel({
       togglePause: () => this.togglePause(),
@@ -111,18 +133,16 @@ class App {
     let shopPane: Node[];
     if (visit) {
       this.visitBanner = new VisitBanner(visit);
-      const note = 'You are visiting a shared shop. Sharing your own shop, or starting a new one, is done from your own shop.';
+      const note = 'You are visiting a shared shop. Sharing, exporting and the save slots are in your own shops.';
       shopPane = [el('p', { className: 'muted' }, note), this.catCard.root, catHint];
     } else {
       this.shareCard = new ShareCard(this.shop, () => this.stats());
-      const fresh = el('button', { textContent: 'Start a new shop' });
-      fresh.onclick = () => this.startOver();
-      shopPane = [this.shareCard.root, this.catCard.root, catHint, fresh];
+      shopPane = [this.shareCard.root, this.saveCard(), this.catCard.root, catHint];
     }
     this.tabs = new Tabs([
       { id: 'regulars', label: 'Regulars', content: [this.regularsPanel.list] },
       { id: 'log', label: 'Happenings', content: [this.regularsPanel.log] },
-      { id: 'keys', label: 'Keys', content: keysPane() },
+      { id: 'help', label: 'Help', content: helpPane(() => this.startTour()) },
       { id: 'shop', label: 'Shop', content: shopPane },
     ]);
     this.floorArea.append(this.canvas);
@@ -151,12 +171,17 @@ class App {
         if (document.visibilityState === 'hidden') this.save();
       });
     }
+    // A shop of the player's own that has not had the tour offered gets it, after any morning report.
+    const offer = !visit && !this.shop.tutorialSeen ? () => this.offerTour() : () => {};
     if (report) {
       // The clock waits while the morning report is read.
       this.running = false;
       const loyalty = new Map(this.shop.regulars.map((r) => [r.id, r.loyalty]));
-      showMorningReport(report, loyalty, () => this.togglePause());
-    }
+      showMorningReport(report, loyalty, () => {
+        this.togglePause();
+        offer();
+      });
+    } else offer();
     this.schedule();
     this.render();
     // The canvas draws text in the canvas's own fonts; redraw once they have loaded.
@@ -164,15 +189,98 @@ class App {
   }
 
   private save(): void {
-    if (!this.resetting && !this.shop.visiting) writeSave(this.shop);
+    if (!this.leaving && this.slot !== null) writeSave(this.shop, this.slot);
   }
 
-  private startOver(): void {
-    if (this.shop.visiting) return;
-    if (!window.confirm('Start a new shop? This clears the saved one.')) return;
-    this.resetting = true;
-    clearSave(this.shop.debug);
+  /**
+   * An old save may have bought floor rows before its first regular was
+   * happy, which can leave it too poor to build a first line: those rows are
+   * taken back and refunded. Then a till and pieces worth less than a new
+   * shop's till are topped up to it.
+   */
+  private fixOldSave(): void {
+    const rows = this.shop.refundEarlyRows();
+    if (rows) this.notes.unshift(refundNote(rows, this.shop.rowsLocked() ?? 'Floor rows wait for a happy regular'));
+    const added = this.shop.topUp();
+    if (added) this.notes.unshift(`Topped up the till by ${added} coins: your till and your pieces are worth the ${START_COINS} a new shop starts with.`);
+    if (!rows && !added) return;
+    const said = [rows ? `${rows.coins} coins back for floor rows bought early` : '', added ? `${added} coins added to the till` : ''];
+    this.editor.message = `${said.filter(Boolean).join(', and ')}. See Happenings.`;
+    this.save();
+  }
+
+  /** The Shop tab's card for this shop's save: export it, or go back to the slots. */
+  private saveCard(): HTMLElement {
+    const exportBtn = el('button', { textContent: 'Export save' });
+    exportBtn.onclick = () => downloadSave(saveShop(this.shop, Date.now()));
+    const slots = el('button', { textContent: 'Back to save slots' });
+    slots.onclick = () => this.toSlots();
+    return el(
+      'div',
+      { className: 'card save-card' },
+      el('div', { className: 'card-name' }, 'Your save'),
+      el('div', { className: 'muted' }, `This shop is saved in slot ${this.slot} as you play. Export it to keep a copy, or to move it to another browser.`),
+      el('div', { className: 'row' }, exportBtn, slots),
+    );
+  }
+
+  /** Save, and go back to the save slots. */
+  private toSlots(): void {
+    this.save();
+    this.leaving = true;
     location.reload();
+  }
+
+  private offerTour(): void {
+    offerTour(TOUR_STEPS, {
+      take: () => {
+        this.tourSeen();
+        this.startTour();
+      },
+      skip: () => this.tourSeen(),
+    });
+  }
+
+  private tourSeen(): void {
+    this.shop.tutorialSeen = true;
+    this.save();
+  }
+
+  startTour(): void {
+    this.tour?.end();
+    this.tour = new Tour(
+      {
+        clock: this.panel.clock,
+        newcomer: this.regularsPanel.next,
+        pieces: this.panel.pieceButtons(START_PIECES),
+        till: this.panel.tillCard,
+        help: this.tabs.button('help'),
+        floor: (part) => this.floorBox(part),
+      },
+      this.stoolExample(),
+      () => {
+        this.tour = null;
+      },
+    );
+    this.tour.start();
+  }
+
+  /** The newest timed regular at a stool, for the tour to read their stool out. */
+  private stoolExample(): StoolExample {
+    const timed = this.shop.regulars.map((_, i) => this.shop.defs[i]).filter((d) => !d.bowl && d.order.tick !== 'any');
+    const def = timed.at(-1) ?? REGULARS[0];
+    const tick = def.order.tick === 'any' ? 0 : def.order.tick;
+    return { tick, slot: slotOf(tick, def.col) };
+  }
+
+  /** The feeder column, or the counter with its stools, in page pixels. */
+  private floorBox(part: 'feeder' | 'counter'): Box | null {
+    const c = this.canvas.getBoundingClientRect();
+    const g = this.geo;
+    if (c.width === 0) return null;
+    if (part === 'counter') return { left: c.left + g.x0, top: c.top + g.counterY, width: g.floorW, height: g.bandY + g.band - g.counterY };
+    const top = Math.max(PAD, g.counterY - g.rows * g.tile + g.camY);
+    return { left: c.left + g.x0, top: c.top + top, width: g.tile, height: g.counterY + g.tile - top };
   }
 
   /** The cat's seat, once it has started asking for milk. */
@@ -248,6 +356,8 @@ class App {
     const item = sim.belts[i];
     const parts = [`Row ${h.row}, column ${h.col}`];
     if (s) parts.push(`${s.kind} (${structureToken(s)})`);
+    const piece = s ? pieceOf(s.kind) : null;
+    if (piece) parts.push(`Z deletes it, all ${PIECE_PRICE[piece]} back`);
     if (item) parts.push(`holding ${itemName(item)}`);
     if (s?.kind === 'bowl') parts.push(this.catSeat() >= 0 ? 'the cat wants warm milk here on tick 10' : 'the cat is not asking yet');
     if (s?.kind === 'feeder') parts.push(`the only way onto the counter; slot ${feederSlot(this.shop.T - 1, h.row)} is passing`);
@@ -398,6 +508,7 @@ class App {
         : '',
       canUndo: this.editor.canUndo,
       canRedo: this.editor.canRedo,
+      rowsLocked: this.shop.rowsLocked(),
     });
     this.regularsPanel.update(
       this.shop.defs,
@@ -413,32 +524,43 @@ class App {
   }
 }
 
+/** How far the player has got: their furthest shop, or a new shop's progress if they have none. */
+function ownProgress(debug: boolean): Progress {
+  const shops = SLOTS.map((n) => openSlot(REGULARS, debug, n)?.shop ?? null).filter((s): s is Shop => s !== null);
+  const all = shops.map((s) => progressOf(s, REGULARS));
+  return all.reduce((best, p) => (isBehind(best, p) ? p : best), progressOf(null, REGULARS));
+}
+
 /**
  * Open the shop the URL names. A share link in the fragment opens someone
- * else's shop as a visit; a player whose own shop is behind it is warned of
- * spoilers first. Anything else opens the player's own shop.
+ * else's shop as a visit; a player whose furthest shop is behind it is warned
+ * of spoilers first. Anything else shows the save slots, to open one of the
+ * player's own shops or start a new one.
  */
 function open(root: HTMLElement, debug: boolean): void {
   // Pasting another link into the address bar reopens the page on what it names.
   window.addEventListener('hashchange', () => location.reload());
+  // The one save from before there were slots moves into the first empty slot.
+  migrateLegacySave(debug);
   const fragment = location.hash.slice(1);
   const shared = fragment ? decodeShare(fragment, REGULARS) : null;
-  const start = (visit: Shop | null, notice = '') => {
-    const app = new App(root, debug, visit, notice);
+  const start = (opening: Opening, notice = '') => {
+    const app = new App(root, debug, opening, notice);
     // Dev builds only: lets the console inspect the shop.
     if (import.meta.env.DEV) (window as unknown as { ticktock: App }).ticktock = app;
   };
+  const slots = (notice = '') => showSlotScreen({ defs: REGULARS, debug, notice, open: (slot) => start({ slot }) });
   if (!shared) {
-    if (!fragment) return start(null);
-    // A link that does not open a shop: drop it, and open the player's own.
+    if (!fragment) return slots();
+    // A link that does not open a shop: drop it, and show the player's own.
     history.replaceState(null, '', location.pathname + location.search);
-    return start(null, 'That share link could not be opened, so here is your own shop.');
+    return slots('That share link could not be opened, so here are your own shops.');
   }
   const visit = visitShop(shared, REGULARS, debug)!;
   const stats = shopStats(shared.layout, shared.walkedIn, REGULARS);
-  const own = progressOf(readSave(REGULARS, debug)?.shop ?? null, REGULARS);
-  if (!isBehind(own, stats)) return start(visit);
-  showSpoilerWarning(shared.name, stats, own, { open: () => start(visit), back: leaveVisit });
+  const own = ownProgress(debug);
+  if (!isBehind(own, stats)) return start({ visit });
+  showSpoilerWarning(shared.name, stats, own, { open: () => start({ visit }), back: leaveVisit });
 }
 
 open(document.getElementById('app')!, new URLSearchParams(location.search).has('debug'));

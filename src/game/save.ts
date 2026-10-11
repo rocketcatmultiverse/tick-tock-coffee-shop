@@ -1,5 +1,6 @@
 // The save file (docs/SPEC.md, Spec 3): the layout plus the shop's books.
-// Pure: the UI decides where it is stored and passes the clock in.
+// Pure: the UI decides where it is stored and passes the clock in. Fields
+// added since are optional, so every older save still loads.
 
 import type { Dir, Layout, RegularDef, Structure } from '../sim/types';
 import { tileIndex } from '../sim/grid';
@@ -14,6 +15,7 @@ export interface Save {
   till: number;
   catName: string; // chosen by the player
   shopName?: string; // chosen by the player, for share links; older saves have none
+  tutorialSeen?: boolean; // the tour was offered; older saves have none, so it is offered to them
   gears: number; // paid by the clockmaker; buys nothing
   regulars: RegularState[];
   lastSeen: number; // epoch ms, read only by the game layer
@@ -26,6 +28,7 @@ export function saveShop(shop: Shop, now: number): Save {
     till: shop.till,
     catName: shop.catName,
     shopName: shop.shopName,
+    tutorialSeen: shop.tutorialSeen,
     gears: shop.gears,
     regulars: shop.regulars.map((r) => ({ ...r })),
     lastSeen: now,
@@ -46,6 +49,25 @@ export function loadShop(
   const shop = new Shop({ defs, debug, visiting });
   shop.restore(data);
   return { shop, lastSeen: data.lastSeen };
+}
+
+/** The data as a save this version understands, or null. */
+export function asSave(data: unknown, defs: readonly RegularDef[]): Save | null {
+  return isSave(data, defs) ? data : null;
+}
+
+/** A save as the text of an exported file, for keeping a copy or moving it to another browser. */
+export function exportText(save: Save): string {
+  return JSON.stringify(save, null, 2);
+}
+
+/** A save read back from an exported file's text, or null if the text is not one. */
+export function importText(text: string, defs: readonly RegularDef[]): Save | null {
+  try {
+    return asSave(JSON.parse(text), defs);
+  } catch {
+    return null;
+  }
 }
 
 const DIRS = new Set<Dir>(['N', 'E', 'S', 'W']);
@@ -92,6 +114,7 @@ function isSave(data: unknown, defs: readonly RegularDef[]): data is Save {
   if (typeof d.till !== 'number' || !Number.isFinite(d.till)) return false;
   if (!isCount(d.gears) || typeof d.catName !== 'string' || typeof d.lastSeen !== 'number') return false;
   if (d.shopName !== undefined && typeof d.shopName !== 'string') return false;
+  if (d.tutorialSeen !== undefined && typeof d.tutorialSeen !== 'boolean') return false;
   const regs = d.regulars;
   if (!Array.isArray(regs) || regs.length > defs.length || (defs.length > 0 && regs.length === 0)) return false;
   return regs.every(

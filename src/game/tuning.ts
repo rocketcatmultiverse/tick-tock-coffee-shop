@@ -34,6 +34,12 @@ export const PIECE_PRICE: Record<PieceKind, number> = {
 };
 
 export const FLOOR_ROW_PRICE = 50;
+/**
+ * Floor rows are for sale once this many regulars have been happy, so a new
+ * shop cannot spend its first coins on floor it does not need yet (proposed,
+ * docs/QUESTIONS.md).
+ */
+export const ROWS_FOR_SALE_AFTER_HAPPY = 1;
 export const MILK_PAIL_PRICE = 2;
 
 /** Warm milk has no price: only the cat drinks it, and the cat pays nothing. */
@@ -58,6 +64,9 @@ export const GEARS_JUST_IN_TIME = 2;
 /** The cat's bowl: pre-placed at row 3, column 9, next to the milk (docs/ADDENDUM-01.md). */
 export const BOWL_ROW = 3;
 export const BOWL_COL = 9;
+
+/** Save slots on the title screen, each holding one shop. */
+export const SAVE_SLOTS = 3;
 
 /** Entries kept in the paste buffer history, newest first (proposed). */
 export const BUFFER_HISTORY = 10;

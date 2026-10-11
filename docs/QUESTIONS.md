@@ -564,3 +564,61 @@ cost and regulars happy. *Done as:*
   shared shop again.
 `src/game/share.ts`, `src/ui/share.ts`, `src/ui/main.ts`, `src/ui/storage.ts`.
 
+
+**Q69. Floor rows wait for a happy regular, and no save is left too poor to
+build.** *Your request, from player feedback ("you start with 30 coins"):*
+the likeliest cause is the Buy a row button: 80 coins less a 50-coin row is
+30, too little for a first line (a well, a plot and a kettle cost 50), and a
+row is never refunded. *Done as:*
+- *rows wait:* a row is for sale only once `ROWS_FOR_SALE_AFTER_HAPPY` (1)
+  regulars have been happy. Happiness is not saved (Q62), so "have been
+  happy" counts every regular but the newest (each walked in only once all
+  before were happy), plus the newest if they are happy now. A reload never
+  locks rows again. Debug shops, and a shop with no regulars, may always buy.
+  The button is not disabled, so it keeps its tooltip and a click says why;
+  the tooltip also says a row is never refunded;
+- *old saves fixed on load:* a player's own save that bought rows before
+  any regular was happy has those rows taken back, with any pieces on them
+  and any chute with one end there, all refunded in full. Rows are bought at
+  the far end, so no other tile is renumbered. A note in Happenings says so;
+- *top-up on load, assumed reading of "less than the starting amount among
+  their placed machines":* when a player's own shop opens, if its till plus
+  every piece on the floor at its refund value is under `START_COINS`, the
+  till is topped up to make it `START_COINS`. Rows bought are not counted.
+  It runs after the row refund, so the 30-coin save above opens with 80 on
+  its six rows. Shared shops opened from a link are never changed;
+- *deleting refunds in full* is now said where players look: the build
+  panel's bottom line, a floor piece's hover line ("Z deletes it, all 25
+  back"), every piece tooltip, the delete message, the Help tab and the tour.
+`src/game/shop.ts` (`rowsLocked`, `refundEarlyRows`, `topUp`),
+`src/game/build.ts` (`floorValue`), `src/ui/main.ts` (`fixOldSave`),
+`src/ui/tips.ts`.
+
+**Q70. Save slots, export and import, and the tour.** *Your request:* at
+least three save slots on entering the game, export from the Shop tab or the
+slots, import on the slot screen, a way back to the slots from the game, and
+a light tour offered to new shops and to saves that have not had it. *Done as:*
+- *slots:* `SAVE_SLOTS` (3) keys, `ticktock.slot.1` to `.3` (debug saves
+  apart, as before). The page opens on the slot screen; Enter opens the shop
+  played most recently. "Back to save slots" in the Shop tab saves and
+  reloads. A share link still opens straight into the visit, and its spoiler
+  check now compares with the player's furthest shop in any slot. "Start a
+  new shop" moved to the slot screen: an empty slot, or Delete (confirmed);
+- *the old save:* on first load, `ticktock.save` is copied unchanged into the
+  first empty slot and removed only once the copy reads back the same. With
+  every slot taken it stays put until one is free. A slot this version
+  cannot read is shown as such and never written over unasked: it can be
+  exported as it is, or deleted;
+- *export and import:* an export is the save itself as a JSON file. Import
+  reads one into a chosen slot (confirming before replacing a shop) and
+  refuses anything `loadShop` would. The export keeps `lastSeen`, so a shop
+  moved between browsers gets a morning report for the time in between;
+- *the tour:* seven steps with a spotlight and Next, Back and Skip: the clock
+  (ticks), the newest regular, the first four pieces, the feeder, slots and
+  stools, coins and refunds, then the Help tab. The floor keeps running and
+  stays clickable under it. It is offered once per shop, after any morning
+  report, and either answer is saved as `tutorialSeen`, an optional field
+  older saves lack, so they are offered it too. "Take the tour" in the Help
+  tab (the Keys tab, renamed) runs it again. Not offered on a visit.
+`src/ui/storage.ts`, `src/ui/slots.ts`, `src/ui/tutorial.ts`,
+`src/game/save.ts`.

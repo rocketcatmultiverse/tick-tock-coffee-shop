@@ -38,6 +38,23 @@ describe('Save and load', () => {
     expect(loaded.till).toBeGreaterThan(till);
   });
 
+  it('keeps whether the tour was offered', () => {
+    const shop = playedShop();
+    expect(loadShop(saveShop(shop, 0), REGULARS, true)!.shop.tutorialSeen).toBe(false);
+    shop.tutorialSeen = true;
+    expect(loadShop(JSON.parse(JSON.stringify(saveShop(shop, 0))), REGULARS, true)!.shop.tutorialSeen).toBe(true);
+  });
+
+  it('loads an older save without the newer fields, and offers it the tour', () => {
+    const save: Record<string, unknown> = { ...saveShop(playedShop(), 0) };
+    delete save.tutorialSeen;
+    delete save.shopName;
+    const back = loadShop(save, REGULARS, true);
+    expect(back).not.toBeNull();
+    expect(back!.shop.tutorialSeen).toBe(false);
+    expect(back!.shop.shopName).toBe('');
+  });
+
   it('refuses a save it does not understand', () => {
     expect(loadShop(null, REGULARS)).toBeNull();
     expect(loadShop({ version: 2 }, REGULARS)).toBeNull();

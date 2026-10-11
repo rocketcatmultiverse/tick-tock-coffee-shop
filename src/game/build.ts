@@ -55,6 +55,11 @@ export function tileValue(s: Structure | null): number {
   return p ? PIECE_PRICE[p] : 0;
 }
 
+/** What every piece on a floor is worth: what deleting them all would refund. */
+export function floorValue(layout: Layout): number {
+  return layout.tiles.reduce((n, s) => n + tileValue(s), 0);
+}
+
 function same(a: Structure | null, b: Structure | null): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }

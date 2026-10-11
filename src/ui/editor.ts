@@ -308,7 +308,7 @@ export class Editor {
     const plan = this.commit(tiles.map((index) => ({ index, to: null })));
     if (!plan) return false;
     this.buffer = pushEntry(this.buffer, entry, BUFFER_HISTORY);
-    this.message = `${verb} ${tiles.length} piece(s), refunded ${-plan.cost}`;
+    this.message = `${verb} ${tiles.length} piece(s): ${-plan.cost} coins back, a full refund`;
     return true;
   }
 

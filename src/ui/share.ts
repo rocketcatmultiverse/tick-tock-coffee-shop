@@ -11,7 +11,7 @@ function shareUrl(fragment: string): string {
   return `${location.origin}${location.pathname}#${fragment}`;
 }
 
-/** Back to the player's own shop: drop the shared one from the URL and open the page again from the save. */
+/** Back to the player's own shops: drop the shared one from the URL and open the page again on the save slots. */
 export function leaveVisit(): void {
   history.replaceState(null, '', location.pathname + location.search);
   location.reload();
@@ -79,7 +79,7 @@ export class VisitBanner {
   private shown = '';
 
   constructor(shop: Shop) {
-    const back = el('button', { className: 'primary', textContent: 'Back to my shop' });
+    const back = el('button', { className: 'primary', textContent: 'Back to my shops' });
     back.onclick = () => leaveVisit();
     this.root.append(
       el('div', { className: 'visit-top' }, el('div', { className: 'card-name' }, `Visiting ${shopTitle(shop.shopName)}`), back),
@@ -95,7 +95,7 @@ export class VisitBanner {
 
 /** Before opening a shared shop that has got further than the player's own. */
 export function showSpoilerWarning(name: string, shared: ShopStats, own: Progress, choose: { open(): void; back(): void }): void {
-  const back = el('button', { className: 'primary', textContent: 'Back to my shop' });
+  const back = el('button', { className: 'primary', textContent: 'Back to my shops' });
   const open = el('button', { textContent: 'Open it anyway' });
   const regulars = (n: number) => `${n} regular${n === 1 ? '' : 's'}`;
   const card = el(

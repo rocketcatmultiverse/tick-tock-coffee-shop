@@ -744,3 +744,238 @@ details > summary {
 .equation.sub .op {
   line-height: 30px;
 }
+
+/* ---- Floor rows, locked until the first regular is happy ----------------------------- */
+
+.build-side button.locked {
+  border-style: dashed;
+  color: var(--muted);
+  cursor: default;
+}
+
+.build-side button.locked:hover {
+  background: var(--panel);
+}
+
+.tip-foot {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* A button that reads as a link: the tour's skip. */
+button.link {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+button.link:hover:not(:disabled) {
+  background: none;
+  color: var(--cream);
+}
+
+/* ---- The save in the Shop tab, and the tour in the Help tab ------------------------- */
+
+.save-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.help-tour {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.help-tour button {
+  flex: none;
+}
+
+/* ---- The save slots: the first screen ---------------------------------------------- */
+
+.slots-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 32px 16px;
+  background: var(--night);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.slots-screen h1 {
+  margin: 0;
+  font-family: var(--brush);
+  font-weight: 400;
+  font-size: 60px;
+  line-height: 1;
+  color: var(--gold);
+}
+
+.slots-lead {
+  margin: 0;
+  font-family: var(--brush);
+  font-size: 26px;
+}
+
+.slots-notice {
+  margin: 0;
+  color: var(--gold);
+}
+
+.slots {
+  display: grid;
+  grid-template-columns: repeat(3, 300px);
+  gap: 18px;
+  margin-top: 8px;
+}
+
+.card.slot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 230px;
+  padding: 14px 16px;
+}
+
+.card.slot.empty {
+  border-style: dashed;
+}
+
+.card.slot.empty .card-name,
+.card.slot.unreadable .card-name {
+  color: var(--muted);
+}
+
+.slot-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.slot-body {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.slot-body .portrait {
+  flex: none;
+}
+
+.slot-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.card.slot > button {
+  margin-top: auto;
+  height: 40px;
+}
+
+.slot-actions button {
+  flex: 1;
+  font-size: 15px;
+  padding: 3px 6px;
+}
+
+.slot-status {
+  min-height: 1.3em;
+  color: var(--gold);
+}
+
+.slots-foot {
+  max-width: 640px;
+  margin: 0;
+  text-align: center;
+}
+
+/* ---- The tour: a spotlight on one part of the page, and a card beside it ------------- */
+
+.tour-spot {
+  position: fixed;
+  z-index: 15;
+  pointer-events: none;
+  box-sizing: border-box;
+  border: 3px solid var(--gold);
+  border-radius: 14px;
+  box-shadow: 0 0 0 9999px rgba(20, 14, 22, 0.62);
+}
+
+.tour-card {
+  position: fixed;
+  z-index: 16;
+  box-sizing: border-box;
+  width: 360px;
+  padding: 12px 18px 14px;
+  background: var(--panel);
+  border: 2.5px solid var(--gold);
+  border-radius: var(--sketch);
+  box-shadow: 0 8px 26px rgba(10, 6, 12, 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tour-card h3 {
+  margin: 0;
+  font-family: var(--brush);
+  font-weight: 400;
+  font-size: 28px;
+  line-height: 1.05;
+  color: var(--gold);
+}
+
+.tour-card p {
+  margin: 0;
+}
+
+.tour-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.tour-pieces {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tour-pieces li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 15px;
+}
+
+.tour-pieces img {
+  flex: none;
+  background: var(--floor);
+  border-radius: 8px;
+}
+
+.tour-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}

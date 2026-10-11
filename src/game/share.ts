@@ -7,7 +7,7 @@ import { findCycle } from '../sim/steady';
 import { parseToken, structureToken } from '../sim/text';
 import { LOOP } from '../sim/tuning';
 import type { Dir, Layout, RegularDef, Structure } from '../sim/types';
-import { tileValue } from './build';
+import { floorValue } from './build';
 import { isMilkDrinker, seatFor } from './regulars';
 import { type Save, loadShop } from './save';
 import type { Shop } from './shop';
@@ -146,7 +146,7 @@ export function visitShop(d: ShareData, defs: readonly RegularDef[], debug: bool
 /** Rows bought, the floor's cost and the regulars it keeps happy, with everyone up to `walkedIn` in. */
 export function shopStats(layout: Layout, walkedIn: number, defs: readonly RegularDef[]): ShopStats {
   const rowsBought = Math.max(0, layout.rows - START_ROWS);
-  const cost = layout.tiles.reduce((n, s) => n + tileValue(s), 0) + rowsBought * FLOOR_ROW_PRICE;
+  const cost = floorValue(layout) + rowsBought * FLOOR_ROW_PRICE;
   // Steady state with the whole milk order paid for, as the counter strip reads it.
   const inShop = defs.slice(0, walkedIn);
   const seats = inShop.map(seatFor);

@@ -31,6 +31,8 @@ export interface PanelModel {
   bufferInfo: string;
   canUndo: boolean;
   canRedo: boolean;
+  /** Why no floor row is for sale yet, or null if one is. */
+  rowsLocked: string | null;
 }
 
 export interface PanelActions {
@@ -43,8 +45,11 @@ export interface PanelActions {
   redo(): void;
 }
 
+/** The bottom line of the build panel when nothing on the floor is hovered. */
+const REFUND_HINT = 'Z deletes the piece under the cursor, with a full refund.';
+
 /** The sprite each palette piece is shown with. */
-const ICON: Record<PieceKind, string> = {
+export const PIECE_ICON: Record<PieceKind, string> = {
   belt: 'belt:E',
   plot: 'plot:S:1',
   kettle: 'kettle:S:-',
@@ -132,7 +137,7 @@ export class Panel {
     const palette = el('div', { className: 'palette' });
     ALL_PIECES.forEach((piece, i) => {
       const label = el('span', { className: 'piece-label' });
-      const icon = spriteImg(ICON[piece], 40);
+      const icon = spriteImg(PIECE_ICON[piece], 40);
       const unknown = el('span', { className: 'piece-unknown', textContent: '?' });
       const info = el('span', { className: 'piece-info', textContent: 'i' });
       const btn = el('button', { className: 'piece' }, el('span', { className: 'piece-key', textContent: pieceKey(i) ?? '' }), info, icon, unknown, label);
@@ -153,6 +158,11 @@ export class Panel {
         this.bufferInfo,
       ),
     );
+  }
+
+  /** The palette buttons of these pieces, for the tour to point at. */
+  pieceButtons(pieces: readonly PieceKind[]): HTMLElement[] {
+    return pieces.map((p) => this.paletteBtns.get(p)!.btn);
   }
 
   update(m: PanelModel): void {
@@ -185,11 +195,15 @@ export class Panel {
       btn.dataset.tip = pieceTipKey(p.piece, p.locked);
       btn.classList.toggle('active', m.inHand === p.piece);
     }
+    // A row not for sale yet is not disabled, so it still gets its tooltip, and a click says why.
+    this.rowBtn.classList.toggle('locked', m.rowsLocked !== null);
+    this.rowBtn.setAttribute('aria-disabled', String(m.rowsLocked !== null));
+    this.rowBtn.dataset.tip = m.rowsLocked === null ? 'row' : 'row:locked';
     this.undoBtn.disabled = !m.canUndo;
     this.redoBtn.disabled = !m.canRedo;
     this.bufferInfo.textContent = m.bufferInfo;
     this.message.textContent = m.message;
-    this.hover.textContent = m.hoverInfo;
+    this.hover.textContent = m.hoverInfo || REFUND_HINT;
   }
 }
 
@@ -218,6 +232,11 @@ export class Tabs {
   /** The tab showing. */
   current = '';
 
+  /** A tab's button, for the tour to point at. */
+  button(id: string): HTMLElement {
+    return this.buttons.get(id)!;
+  }
+
   select(id: string): void {
     this.current = id;
     for (const [k, b] of this.buttons) b.classList.toggle('active', k === id);
@@ -225,9 +244,12 @@ export class Tabs {
   }
 }
 
-/** The keys, and credits for the fonts. */
-export function keysPane(): HTMLElement[] {
+/** The tour, the keys, and credits for the fonts. */
+export function helpPane(startTour: () => void): HTMLElement[] {
+  const tour = el('button', { className: 'primary', textContent: 'Take the tour' });
+  tour.onclick = startTour;
   return [
+    el('div', { className: 'help-tour' }, tour, el('span', { className: 'muted' }, 'A few short steps: the clock, slots and your first four pieces.')),
     el(
       'ul',
       { className: 'keys' },
@@ -235,7 +257,7 @@ export function keysPane(): HTMLElement[] {
         'Click a palette piece, or press its number key (1 to 9, then 0), then click the floor. Drag to lay belts.',
         'Hover a palette piece for its rules, and an underlined drink for how it is made',
         'R turn · F flip · Esc or right-click put down',
-        'Z delete · X cut · C copy (the tile under the cursor)',
+        'Z delete, with a full refund · X cut · C copy (the tile under the cursor)',
         'Shift+drag box select, then Z, Ctrl+X, Ctrl+C',
         'Ctrl+V pick up the buffer · Ctrl+wheel older entries',
         'Ctrl+Z undo · Ctrl+Y redo',
