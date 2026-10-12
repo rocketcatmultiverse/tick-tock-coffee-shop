@@ -137,6 +137,18 @@ describe('Geometry', () => {
     expect(g.camX).toBe(0);
   });
 
+  it('says whether a back-room tile is in view, by its middle', () => {
+    const g = new Geometry();
+    g.fit(300, 420, 16, MIN_TOUCH_TILE);
+    expect(g.shows(0, 0)).toBe(true);
+    // Too far right, and too far back, for the window.
+    expect(g.shows(0, 11)).toBe(false);
+    expect(g.shows(15, 0)).toBe(false);
+    g.centerOn(15, 11);
+    expect(g.shows(15, 11)).toBe(true);
+    expect(g.shows(0, 0)).toBe(false);
+  });
+
   it('the zoom stays between ZOOM_MIN_TILE and ZOOM_MAX_TILE, and lasts through a refit', () => {
     const g = new Geometry();
     g.fit(360, 600, 6, MIN_TOUCH_TILE);

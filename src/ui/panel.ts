@@ -207,7 +207,7 @@ const KEYS = [
 
 /** Fingers. */
 const TOUCH = [
-  'Tap a palette piece: its ghost appears in the middle of the floor. Swipe across the palette, or use its arrows, for more pieces.',
+  'Tap a palette piece: its ghost appears on the tile you last tapped, if it is in view, or else in the middle of the floor. Swipe across the palette, or use its arrows, for more pieces.',
   'Move the ghost with the stick at the bottom right, and tap Place in its middle to put the piece down. Or tap a tile to move the ghost there, and tap the ghost to put it down.',
   'Holding a belt, tap Lay to start a run: moving the ghost lays belts that turn to follow it. Tap Stop to end the run.',
   'Turn is first in the tool bar while you hold something, then Put down (in red), then Flip, greyed out when it would change nothing.',

@@ -770,3 +770,14 @@ a toast at least, on desktop too. *Done as:*
 stays a line in Happenings. No sound or motion (CLAUDE.md, scope).
 `src/game/shop.ts`, `src/ui/toast.ts`, `src/ui/main.ts` (`lookAtSeat`),
 `src/ui/geometry.ts` (`centerOn`), `src/ui/render.ts`.
+
+**Q75. The ghost starts on the tile last tapped.** *Your request:* if a
+phone player has a tile selected and it is still visible, start the ghost
+there. *Done as:* picking a piece, or taking one up with Cut, Copy or Paste,
+from an empty hand starts the ghost on the tile last tapped (the gold-dashed
+one) when its middle is still in the window onto the back room
+(`Geometry.shows`); scrolled out of view, or none tapped, the ghost starts in
+the middle of the floor in view as before (Q72). This also changes Q72's cut
+and copy: a piece cut from a tile now scrolled away starts mid-floor, not on
+its old tile. A mouse is unchanged. `src/ui/main.ts` (`syncCursor`),
+`src/ui/geometry.ts`.

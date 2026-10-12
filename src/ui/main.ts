@@ -156,7 +156,8 @@ class App {
       this.editor.pick(p);
       if (this.editor.hand) {
         this.selectMode = false;
-        this.inspect = null;
+        // A finger's ghost may start on the tile last tapped (syncCursor); a mouse has its own hover.
+        if (!this.touch) this.inspect = null;
       }
       this.render();
     });
@@ -437,8 +438,8 @@ class App {
 
   /**
    * Keep the ghost in step with the hand: none while the hand is empty; a new
-   * one where a piece was just cut or copied from, else in the middle of the
-   * floor in view.
+   * one on the tile last tapped, if it is still in view (so a cut or a copy
+   * starts where the piece was), else in the middle of the floor in view (Q75).
    */
   private syncCursor(): void {
     if (!this.editor.hand) {
@@ -446,7 +447,8 @@ class App {
       return;
     }
     if (!this.touch || (this.cursor && this.cursor.row < this.shop.layout.rows)) return;
-    const from = this.inspect && this.inspect.row >= 0 ? this.inspect : null;
+    const t = this.inspect;
+    const from = t && t.row >= 0 && t.row < this.shop.layout.rows && this.geo.shows(t.row, t.col) ? t : null;
     this.cursor = from ?? this.middleSpot();
     this.inspect = null;
     this.keepInView(this.cursor);

@@ -139,6 +139,14 @@ export class Geometry {
     this.pan(0, 0);
   }
 
+  /** Whether a back-room tile's middle is inside the canvas's window onto the back room. */
+  shows(row: number, col: number): boolean {
+    const { x, y } = this.tileXY(row, col);
+    const cx = x + this.tile / 2;
+    const cy = y + this.tile / 2;
+    return cx >= 0 && cx < this.width && cy >= PAD && cy < this.counterY;
+  }
+
   /** Move the camera by a drag of (dx, dy) pixels, kept inside the floor. */
   pan(dx: number, dy: number): void {
     this.camY = Math.max(0, Math.min(this.maxCamY, this.camY + dy));
