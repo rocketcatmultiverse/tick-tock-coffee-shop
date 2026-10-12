@@ -444,29 +444,30 @@ function drawEditing(ctx: CanvasRenderingContext2D, view: View, editor: Editor):
     }
   }
 
-  // Hover and the ghost of whatever is in hand.
+  // Hover and the ghost of whatever is in hand. The outline goes under the
+  // ghost, so the side a machine puts out on stays in sight at the tile's edge.
   if (!view.hover || view.hover.row < -1) return;
   const ghost: Ghost | null = view.hover.row >= 0 ? editor.ghost(view.hover.row, view.hover.col) : null;
-  if (ghost) {
-    ctx.save();
-    ctx.globalAlpha = 0.6;
-    for (const ch of ghost.changes) {
-      if (!ch.to) continue;
-      const { x, y } = indexXY(view, ch.index);
-      blit(ctx, view, structureKey(ch.to), x, y);
-      if (ghost.reason) {
-        ctx.fillStyle = 'rgba(200, 85, 61, 0.45)';
-        ctx.fillRect(x, y, T, T);
-      }
-    }
-    ctx.restore();
-  }
   const { x, y } = geo.tileXY(view.hover.row, view.hover.col);
   ctx.strokeStyle = ghost?.reason ? PAL.cherry : view.ghostCursor ? PAL.gold : PAL.cream;
   ctx.lineWidth = view.ghostCursor ? 3.5 : 2.5;
   ctx.beginPath();
   ctx.roundRect(x + 2, y + 2, T - 4, T - 4, 8);
   ctx.stroke();
+  if (ghost) {
+    ctx.save();
+    ctx.globalAlpha = 0.6;
+    for (const ch of ghost.changes) {
+      if (!ch.to) continue;
+      const at = indexXY(view, ch.index);
+      blit(ctx, view, structureKey(ch.to), at.x, at.y);
+      if (ghost.reason) {
+        ctx.fillStyle = 'rgba(200, 85, 61, 0.45)';
+        ctx.fillRect(at.x, at.y, T, T);
+      }
+    }
+    ctx.restore();
+  }
   if (ghost?.reason) {
     ctx.font = `15px ${BODY_FONT}`;
     const tw = ctx.measureText(ghost.reason).width;
