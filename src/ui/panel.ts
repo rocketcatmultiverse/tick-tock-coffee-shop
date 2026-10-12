@@ -1,11 +1,10 @@
 // The panels around the floor: plain DOM, updated in place on every render.
-// The clock and its controls, the till with its floor rows, the line of
-// messages under the palette, and the tabs. Where each goes depends on the
+// The clock and its controls, the till, the line of messages under the
+// palette, and the tabs. Floor rows are bought on the floor itself (Q76). Where each goes depends on the
 // window (layout.ts); the panels themselves do not know.
 
 import { roastForTick } from '../sim/items';
 import { LOOP } from '../sim/tuning';
-import { FLOOR_ROW_PRICE } from '../game/tuning';
 import { clockFace } from './art/dom';
 import { icon } from './art/icons';
 import { svgUrl } from './art/raster';
@@ -25,15 +24,12 @@ export interface PanelModel {
   message: string;
   hoverInfo: string;
   bufferInfo: string;
-  /** Why no floor row is for sale yet, or null if one is. */
-  rowsLocked: string | null;
 }
 
 export interface PanelActions {
   togglePause(): void;
   stepOnce(): void;
   setSpeed(n: number): void;
-  buyRow(): void;
 }
 
 const ROAST_LEGEND: [string, number, number][] = [
@@ -45,7 +41,7 @@ const ROAST_LEGEND: [string, number, number][] = [
 export class Panel {
   /** The clock and the time controls. */
   readonly clock: HTMLElement;
-  /** The till, how the shop is doing, and floor rows for sale. */
+  /** The till, and how the shop is doing. */
   readonly tillCard: HTMLElement;
   /** The coins alone, for a narrow window's top bar. */
   readonly coins = el('div', { className: 'coins' });
@@ -66,7 +62,6 @@ export class Panel {
   private seated = el('div');
   private spills = el('div', { className: 'muted' });
   private milk = el('div', { className: 'muted' });
-  private rowBtn = el('button', { className: 'row-btn', textContent: `Buy a row · ${FLOOR_ROW_PRICE}` });
   private message = el('div', { className: 'message' });
   private hover = el('div', { className: 'hover' });
   private bufferInfo = el('div', { className: 'muted buffer-info' });
@@ -79,7 +74,6 @@ export class Panel {
     for (const n of [1, 2, 4]) this.speed.append(el('option', { value: String(n), textContent: `${n}×` }));
     this.speed.setAttribute('aria-label', 'Speed');
     this.speed.onchange = () => actions.setSpeed(Number(this.speed.value));
-    this.rowBtn.onclick = () => actions.buyRow();
 
     const legend = el(
       'div',
@@ -101,7 +95,7 @@ export class Panel {
     this.tillCard = el(
       'div',
       { className: 'card till-card' },
-      el('div', { className: 'till-line' }, this.till, this.gears, this.rowBtn),
+      el('div', { className: 'till-line' }, this.till, this.gears),
       this.seated,
       this.spills,
       this.milk,
@@ -134,10 +128,6 @@ export class Panel {
     this.seated.textContent = m.seated;
     this.spills.textContent = `Spills: ${m.spillsThisLoop} this loop, ${m.spillsLastLoop} last loop`;
     this.milk.textContent = m.milk;
-    // A row not for sale yet is not disabled, so it still gets its tooltip, and a click says why.
-    this.rowBtn.classList.toggle('locked', m.rowsLocked !== null);
-    this.rowBtn.setAttribute('aria-disabled', String(m.rowsLocked !== null));
-    this.rowBtn.dataset.tip = m.rowsLocked === null ? 'row' : 'row:locked';
     this.bufferInfo.textContent = m.bufferInfo;
     this.message.textContent = m.message;
     this.hover.textContent = m.hoverInfo || this.refundHint;
@@ -202,6 +192,7 @@ const KEYS = [
   'Ctrl+Z undo · Ctrl+Y redo',
   'Space pause · . step one tick',
   'Right-drag, middle-drag or the mouse wheel: look around a big floor',
+  'The row of tiles for sale at the top of the floor buys one more row: click it, then again to be sure. Never refunded.',
   'The tool bar beside the floor does all of this with a click, too.',
 ];
 
@@ -213,6 +204,7 @@ const TOUCH = [
   'Turn is first in the tool bar while you hold something, then Put down (in red), then Flip, greyed out when it would change nothing.',
   'Drag one finger to look around. With nothing in hand, tap a tile to see what is on it, then Delete (a full refund), Cut or Copy it.',
   'Two fingers drag to look around, or pinch to zoom, at any time.',
+  'The row of tiles for sale at the top of the floor buys one more row: tap it, then again to be sure. Never refunded.',
   'Select, then drag a box: Delete, Cut and Copy work on all of it. Paste picks up what you last cut, copied or deleted.',
   'Press and hold a palette piece or a tool for what it does, and tap an underlined drink for how it is made. The Guide tab has them all.',
 ];

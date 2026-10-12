@@ -20,7 +20,7 @@ import {
 } from '../sim/tuning';
 import { ALL_PIECES, PIECE_LABEL, type PieceKind } from '../game/pieces';
 import { type Ingredient, type RecipeMachine, type RecipeStep, type Term, kettleTicks, recipeFor, roasterTicks, tickRuns } from '../game/recipes';
-import { FLOOR_ROW_PRICE, MILK_PAIL_PRICE, PIECE_PRICE, ROWS_FOR_SALE_AFTER_HAPPY, START_ROWS } from '../game/tuning';
+import { MILK_PAIL_PRICE, PIECE_PRICE, ROWS_FOR_SALE_AFTER_HAPPY, START_ROWS } from '../game/tuning';
 import { clockWindowImg, spriteImg } from './art/dom';
 import { itemKey } from './art/svg';
 import { touchFirst } from './device';
@@ -184,26 +184,25 @@ function pieceTip(piece: PieceKind): HTMLElement {
   return el('div', {}, header(PIECE_LABEL[piece], `${coins(PIECE_PRICE[piece])}${keyNote(piece)}`), ...pieceBody(piece));
 }
 
-/** What the Buy a row button says: a row is never refunded, and is for sale only once a regular is happy. */
+/** What a floor row is: never refunded, and for sale only once a regular is happy. */
 export const ROW_RULES: string[] = [
   'Adds one more row at the back of the floor, with its own feeder tile.',
   'Unlike a piece, a row cannot be deleted, so its coins never come back.',
+  'Buy one from the row of tiles for sale at the top of the floor: click or tap it, then again to be sure.',
 ];
 
-export const ROW_LOCKED = `Floor rows are for sale once ${
-  ROWS_FOR_SALE_AFTER_HAPPY === 1 ? 'your first regular is' : `your first ${ROWS_FOR_SALE_AFTER_HAPPY} regulars are`
-} happy. The ${START_ROWS} rows you start with are plenty until then.`;
+/** When rows go on sale: "your first regular is happy". */
+export const ROWS_WAIT =
+  ROWS_FOR_SALE_AFTER_HAPPY === 1 ? 'your first regular is happy' : `your first ${ROWS_FOR_SALE_AFTER_HAPPY} regulars are happy`;
 
-/** The Buy a row tooltip under its name. */
+export const ROW_LOCKED = `Floor rows are for sale once ${ROWS_WAIT}. The ${START_ROWS} rows you start with are plenty until then.`;
+
+/** The Guide's entry for floor rows. */
 export function rowBody(locked: boolean): HTMLElement[] {
   return [
     ...(locked ? [el('div', { className: 'muted' }, ROW_LOCKED)] : []),
     el('ul', { className: 'tip-rules' }, ...ROW_RULES.map((line) => el('li', {}, line))),
   ];
-}
-
-function rowTip(locked: boolean): HTMLElement {
-  return el('div', {}, header('Buy a row', locked ? 'not for sale yet' : coins(FLOOR_ROW_PRICE)), ...rowBody(locked));
 }
 
 export const LOCKED_LINE = 'A regular still to come brings this piece.';
@@ -248,7 +247,6 @@ export function tipContent(key: string): HTMLElement | null {
   if ((kind === 'piece' || kind === 'locked') && (ALL_PIECES as readonly string[]).includes(a)) {
     return kind === 'piece' ? pieceTip(a as PieceKind) : lockedTip(a as PieceKind);
   }
-  if (kind === 'row') return rowTip(a === 'locked');
   if (kind === 'order') return orderTip({ kind: a as Drink, roast: b === 'any' ? null : (b as Roast) });
   if (kind === 'tool' && a in TOOLS) return toolTip(a as ToolId);
   return null;

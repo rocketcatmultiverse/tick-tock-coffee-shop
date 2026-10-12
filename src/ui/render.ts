@@ -48,6 +48,8 @@ export interface View {
   panHint: string;
   /** `hover` is a finger's ghost, moved by the thumb stick, not the mouse: drawn bolder so it reads at a glance. */
   ghostCursor: boolean;
+  /** The row for sale above the floor: its words, whether rows are for sale yet or a first click awaits a second, and whether the mouse is on it. */
+  forSale: { label: string; look: 'locked' | 'open' | 'armed'; hot: boolean };
   /** Kettle readouts: the tick its input last landed on and the roast that gave. */
   readouts: Map<number, { tick: number; roast: Roast | null }>;
   stools: StoolView[];
@@ -163,6 +165,7 @@ export function draw(ctx: CanvasRenderingContext2D, view: View): void {
     ctx.fillStyle = PAL.floor;
     ctx.fillRect(x0, floorTop, geo.floorW, rows * T);
   }
+  drawRowForSale(ctx, view);
 
   for (let row = 0; row < rows; row++) {
     const y = geo.tileXY(row, 0).y;
@@ -229,6 +232,48 @@ export function draw(ctx: CanvasRenderingContext2D, view: View): void {
 
   drawCameraHints(ctx, view);
   drawEditing(ctx, view, editor);
+}
+
+/**
+ * The row for sale above the floor's top row (Q76): pale dashed tiles with
+ * the price across them, brighter under the mouse and after a first click;
+ * greyed until rows are for sale.
+ */
+function drawRowForSale(ctx: CanvasRenderingContext2D, view: View): void {
+  const { geo } = view;
+  const T = geo.tile;
+  const { y } = geo.tileXY(geo.rows, 0);
+  if (y > geo.counterY || y + T < PAD) return;
+  const { look, hot, label } = view.forSale;
+  ctx.save();
+  ctx.fillStyle = look === 'locked' ? 'rgba(46, 36, 51, 0.55)' : look === 'armed' || hot ? 'rgba(230, 180, 80, 0.26)' : 'rgba(224, 195, 154, 0.14)';
+  ctx.fillRect(geo.x0, y, geo.floorW, T);
+  ctx.strokeStyle = look === 'locked' ? 'rgba(205, 189, 176, 0.3)' : look === 'armed' ? PAL.gold : 'rgba(224, 195, 154, 0.55)';
+  ctx.lineWidth = look === 'armed' ? 2.5 : 1.5;
+  ctx.setLineDash([5, 4]);
+  for (let col = 0; col < COLS; col++) {
+    ctx.beginPath();
+    ctx.roundRect(geo.x0 + col * T + 3, y + 3, T - 6, T - 6, 7);
+    ctx.stroke();
+  }
+  ctx.restore();
+  // The words across the middle of the strip in view.
+  const left = Math.max(geo.x0, PAD);
+  const right = Math.min(geo.x0 + geo.floorW, geo.width - PAD);
+  const size = Math.max(11, Math.min(18, Math.round(T * 0.36)));
+  ctx.font = `${size}px ${BODY_FONT}`;
+  const w = Math.min(ctx.measureText(label).width + 18, right - left - 8);
+  const color = look === 'locked' ? PAL.muted : PAL.gold;
+  ctx.fillStyle = 'rgba(36, 28, 38, 0.86)';
+  ctx.beginPath();
+  ctx.roundRect((left + right) / 2 - w / 2, y + T / 2 - size * 0.8, w, size * 1.6, size * 0.8);
+  ctx.fill();
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect((left + right) / 2 - w / 2 + 6, y, w - 12, T);
+  ctx.clip();
+  text(ctx, label, (left + right) / 2, y + T / 2 + 1, { size, color });
+  ctx.restore();
 }
 
 const SPLIT_OUT = PAL.gold;
@@ -364,10 +409,11 @@ function drawCameraHints(ctx: CanvasRenderingContext2D, view: View): void {
   if (geo.maxCamY > 0) {
     // The middle of the floor in view.
     const mid = (Math.max(geo.x0, PAD) + Math.min(geo.x0 + geo.floorW, geo.width - PAD)) / 2;
-    const above = Math.floor((geo.maxCamY - geo.camY) / geo.tile);
+    // Rows of floor out of view above, not counting the row for sale at the top.
+    const above = Math.floor((geo.maxCamY - geo.camY) / geo.tile) - 1;
     const below = Math.floor(geo.camY / geo.tile);
     if (geo.camY < geo.maxCamY) {
-      const s = `▲ ${many(Math.max(1, above), 'row')} above · ${view.panHint}`;
+      const s = `▲ ${above > 0 ? `${many(above, 'row')} above` : 'rows for sale above'} · ${view.panHint}`;
       tag(ctx, s, mid - tagW(s) / 2, PAD + 4, PAL.gold, 13);
     }
     if (geo.camY > 0) {
@@ -377,7 +423,7 @@ function drawCameraHints(ctx: CanvasRenderingContext2D, view: View): void {
     // A slim scroll bar beside the floor, or at the canvas's edge when the floor runs past it.
     const trackX = Math.min(geo.x0 + geo.floorW + 4, geo.width - 6);
     const trackH = geo.roomH;
-    const thumbH = Math.max(24, (trackH * geo.roomH) / (geo.rows * geo.tile));
+    const thumbH = Math.max(24, (trackH * geo.roomH) / (geo.roomRows * geo.tile));
     const thumbY = PAD + (trackH - thumbH) * (1 - geo.camY / geo.maxCamY);
     ctx.fillStyle = 'rgba(205, 189, 176, 0.18)';
     ctx.fillRect(trackX, PAD, 4, trackH);

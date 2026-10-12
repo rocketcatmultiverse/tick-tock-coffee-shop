@@ -781,3 +781,27 @@ the middle of the floor in view as before (Q72). This also changes Q72's cut
 and copy: a piece cut from a tile now scrolled away starts mid-floor, not on
 its old tile. A mouse is unchanged. `src/ui/main.ts` (`syncCursor`),
 `src/ui/geometry.ts`.
+
+**Q76. Floor rows are bought from a row of tiles at the top of the floor.**
+*Your request:* move "Buy a row" from the till card to a new set of tiles at
+the top of the map, greyed out before the first regular is happy. *Done as:*
+- *the row for sale:* one row of dashed tiles above the floor's top row,
+  drawn and scrolled as part of the back room but never the floor itself:
+  nothing goes down on it and the ghost cannot reach it. The floor is fitted
+  with it counted, so it shows without scrolling up to twelve rows; on a
+  taller floor the camera goes up to it, and the "rows above" hint counts
+  only floor rows ("rows for sale above" when only it is out of view). It
+  reads "+ Buy a row · 50"; greyed, "Rows for sale once your first regular
+  is happy" until then. Hovering it gives the pointer and its rules in the
+  line under the palette;
+- *buying:* a click or tap asks first ("Buy a row for 50? Click again", the
+  strip turning gold, and the line saying a row is never refunded), and a
+  second within 4 seconds buys. *Assumed:* the old button bought at once, but
+  the strip sits where pieces go down, so a stray click while building near
+  the top could otherwise spend 50 coins for good. Greyed, or with too few
+  coins, a click only says why;
+- *the button* is gone from the till card, with its tooltip; the Guide's
+  Floor rows entry, Help and the tour say where to buy one now.
+`src/ui/geometry.ts` (`roomRows`, `onRowForSale`), `src/ui/render.ts`
+(`drawRowForSale`), `src/ui/main.ts` (`buyRow`), `src/ui/input.ts`,
+`src/ui/panel.ts`, `src/ui/tips.ts`.

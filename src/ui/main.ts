@@ -8,7 +8,7 @@ import { saveShop } from '../game/save';
 import { type Progress, type ShopStats, decodeShare, isBehind, progressOf, shopStats, shopTitle, visitShop } from '../game/share';
 import { type RowRefund, Shop } from '../game/shop';
 import { type StripCell, counterStrip } from '../game/strip';
-import { BOWL_COL, BOWL_ROW, HAPPY_LOOPS, PIECE_PRICE, START_COINS, START_PIECES } from '../game/tuning';
+import { BOWL_COL, BOWL_ROW, FLOOR_ROW_PRICE, HAPPY_LOOPS, PIECE_PRICE, START_COINS, START_PIECES, START_ROWS } from '../game/tuning';
 import { REGULARS } from '../levels/regulars';
 import { catSpot } from './cat';
 import { CatCard } from './catCard';
@@ -29,7 +29,7 @@ import { type StoolView, type View, draw } from './render';
 import { ShareCard, VisitBanner, leaveVisit, showSpoilerWarning } from './share';
 import { downloadSave, showSlotScreen } from './slots';
 import { SLOTS, migrateLegacySave, openSlot, writeSave } from './storage';
-import { tipContent } from './tips';
+import { ROWS_WAIT, tipContent } from './tips';
 import { Toast } from './toast';
 import { type ToolId, Tools } from './tools';
 import { Tooltip } from './tooltip';
@@ -37,6 +37,8 @@ import { type Box, type StoolExample, type TourStepId, TOUR_STEPS, Tour, offerTo
 
 /** How often the shop is saved while open, in milliseconds. */
 const AUTOSAVE_MS = 2000;
+/** How long after a first click on the row for sale a second one buys it. */
+const ROW_ASK_MS = 4000;
 /** Happenings kept in the log. */
 const NOTES_KEPT = 30;
 
@@ -66,6 +68,10 @@ class App {
   readonly geo = new Geometry();
   hover: Spot | null = null;
   inspect: Spot | null = null;
+  /** The mouse is over the row for sale above the floor. */
+  overRowForSale = false;
+  /** When the row for sale was first clicked or tapped: a second, soon after, buys it (Q76). */
+  private rowAskedAt: number | null = null;
   /** On a touch screen, the tile the ghost of what is in hand sits on (Q72). */
   cursor: Spot | null = null;
   selectMode = false;
@@ -143,10 +149,6 @@ class App {
         setSpeed: (n) => {
           this.speed = n;
           this.schedule();
-          this.render();
-        },
-        buyRow: () => {
-          this.editor.message = this.shop.buyRow() ?? 'Bought a floor row';
           this.render();
         },
       },
@@ -363,6 +365,7 @@ class App {
   /** A tap holding something. On a touch screen it moves the ghost there, or puts the piece down if the ghost is there already. */
   tapHolding(spot: Spot): void {
     const ed = this.editor;
+    this.rowAskedAt = null;
     if (spot.row < 0) {
       ed.message = 'The counter is fixed';
       return;
@@ -376,6 +379,39 @@ class App {
     const c = this.cursor;
     if (c && c.row === spot.row && c.col === spot.col) return this.placeAtCursor();
     this.moveCursor(spot);
+  }
+
+  /**
+   * A click or tap on the row for sale. A row is never refunded and the strip
+   * is where pieces go down, so the first asks and a second, soon after, buys.
+   */
+  buyRow(): void {
+    const ed = this.editor;
+    const locked = this.shop.rowsLocked();
+    const asked = this.rowAsked();
+    this.rowAskedAt = null;
+    if (locked) ed.message = `${locked}.`;
+    else if (this.shop.till < FLOOR_ROW_PRICE) ed.message = `A floor row costs ${FLOOR_ROW_PRICE} coins`;
+    else if (asked) ed.message = this.shop.buyRow() ?? 'Bought a floor row';
+    else {
+      this.rowAskedAt = performance.now();
+      ed.message = `A row costs ${FLOOR_ROW_PRICE} and is never refunded. ${this.touch ? 'Tap' : 'Click'} it again to buy it.`;
+      // The strip stops asking when the time is up, even with the clock paused.
+      window.setTimeout(() => this.render(), ROW_ASK_MS + 50);
+    }
+  }
+
+  /** Whether the row for sale was asked about, recently enough for a second click to buy it. */
+  private rowAsked(): boolean {
+    return this.rowAskedAt !== null && performance.now() - this.rowAskedAt < ROW_ASK_MS;
+  }
+
+  /** The row for sale's words and look on the floor. */
+  private forSale(): View['forSale'] {
+    const hot = this.overRowForSale;
+    if (this.shop.rowsLocked()) return { look: 'locked', hot, label: `Rows for sale once ${ROWS_WAIT}` };
+    if (this.rowAsked()) return { look: 'armed', hot, label: `Buy a row for ${FLOOR_ROW_PRICE}? ${this.touch ? 'Tap' : 'Click'} again` };
+    return { look: 'open', hot, label: `+ Buy a row · ${FLOOR_ROW_PRICE}` };
   }
 
   /** The stick moved the ghost one tile. */
@@ -456,6 +492,7 @@ class App {
 
   clickFloor(spot: Spot): void {
     this.inspect = spot;
+    this.rowAskedAt = null;
     const cat = this.catAt();
     if (spot.row === cat.row && spot.col === cat.col) {
       this.tabs.select('shop');
@@ -582,6 +619,10 @@ class App {
   }
 
   private hoverInfo(): string {
+    if (this.overRowForSale) {
+      const locked = this.shop.rowsLocked();
+      return locked ? `${locked}. The ${START_ROWS} rows you start with are plenty until then.` : `A row for ${FLOOR_ROW_PRICE} coins: one more row at the back of the floor, with its own feeder tile. Never refunded.`;
+    }
     const h = this.hover ?? (this.editor.hand ? this.cursor : this.inspect);
     if (!h) return '';
     const { layout, sim } = this.shop;
@@ -721,6 +762,7 @@ class App {
       // A finger's hand shows its ghost where the stick has put it.
       hover: this.cursor ?? this.hover,
       ghostCursor: this.cursor !== null,
+      forSale: this.forSale(),
       inspect: this.inspect,
       panHint: this.touch ? 'drag to look' : 'right-drag or scroll',
       readouts: this.readouts,
@@ -748,7 +790,6 @@ class App {
       bufferInfo: this.editor.buffer.entries.length
         ? `Paste buffer: ${this.editor.buffer.entries.length} entr${this.editor.buffer.entries.length === 1 ? 'y' : 'ies'}`
         : '',
-      rowsLocked: this.shop.rowsLocked(),
     });
     this.palette.update({
       palette: ALL_PIECES.map((piece) => ({

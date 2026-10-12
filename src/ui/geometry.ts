@@ -4,6 +4,8 @@
 // above them is a window the camera moves over when it has more rows than fit.
 // A canvas too narrow for all twelve columns at the smallest tile scrolls
 // sideways the same way, the counter and the stools along with the floor.
+// Above the top row is one more row of tiles, for sale (docs/QUESTIONS.md,
+// Q76): fitted and scrolled to as part of the back room, but not the floor.
 
 import { COLS } from '../sim/tuning';
 
@@ -60,7 +62,8 @@ export class Geometry {
     this.width = width;
     this.height = height;
     this.rows = rows;
-    const inView = Math.max(MIN_ROWS_IN_VIEW, Math.min(MAX_ROWS_IN_VIEW, rows));
+    // The floor's rows in view, the row for sale above them, and the counter.
+    const inView = Math.max(MIN_ROWS_IN_VIEW, Math.min(MAX_ROWS_IN_VIEW, rows)) + 1;
     const byHeight = (height - 2 * PAD) / (inView + 1 + WOOD + BAND);
     const byWidth = (width - 2 * PAD) / COLS;
     const across = byWidth < minTile ? Math.min(byHeight, minTile * SCROLLING_GROWTH) : byWidth;
@@ -118,8 +121,13 @@ export class Geometry {
     return this.counterY - PAD;
   }
 
+  /** The back room's rows: the floor's, and the row for sale above them. */
+  get roomRows(): number {
+    return this.rows + 1;
+  }
+
   get maxCamY(): number {
-    return Math.max(0, this.rows * this.tile - this.roomH);
+    return Math.max(0, this.roomRows * this.tile - this.roomH);
   }
 
   get maxCamX(): number {
@@ -137,6 +145,13 @@ export class Geometry {
     this.camX = PAD + (col + 0.5) * this.tile - this.width / 2;
     if (row !== null) this.camY = (PAD + this.counterY) / 2 - this.counterY + (row + 0.5) * this.tile;
     this.pan(0, 0);
+  }
+
+  /** Whether a pixel is on the row for sale above the floor's top row. */
+  onRowForSale(x: number, y: number): boolean {
+    const col = Math.floor((x - this.x0) / this.tile);
+    if (col < 0 || col >= COLS || x < 0 || x >= this.width || y < PAD || y >= this.counterY) return false;
+    return Math.floor((this.counterY + this.camY - y) / this.tile) === this.rows;
   }
 
   /** Whether a back-room tile's middle is inside the canvas's window onto the back room. */

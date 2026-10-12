@@ -149,6 +149,30 @@ describe('Geometry', () => {
     expect(g.shows(0, 0)).toBe(false);
   });
 
+  it('a strip of tiles for sale sits above the top row, and is not the floor (Q76)', () => {
+    const g = fitted(6);
+    const top = g.tileXY(5, 0).y;
+    const strip = g.tileXY(6, 0).y;
+    expect(strip).toBe(top - g.tile);
+    // The strip shows with the floor, no camera needed.
+    expect(strip).toBeGreaterThanOrEqual(PAD);
+    expect(g.maxCamY).toBe(0);
+    const x = g.x0 + g.tile * 4 + 1;
+    expect(g.onRowForSale(x, strip + 1)).toBe(true);
+    expect(g.hitTest(x, strip + 1)).toBeNull();
+    expect(g.onRowForSale(x, top + 1)).toBe(false);
+    expect(g.onRowForSale(g.x0 - 1, strip + 1)).toBe(false);
+  });
+
+  it('on a floor taller than the view, the camera goes up as far as the strip for sale', () => {
+    const g = fitted(16);
+    g.pan(0, 10_000);
+    const strip = g.tileXY(16, 0).y;
+    expect(strip).toBeGreaterThanOrEqual(PAD);
+    expect(strip).toBeLessThan(PAD + g.tile);
+    expect(g.onRowForSale(g.x0 + 1, strip + 1)).toBe(true);
+  });
+
   it('the zoom stays between ZOOM_MIN_TILE and ZOOM_MAX_TILE, and lasts through a refit', () => {
     const g = new Geometry();
     g.fit(360, 600, 6, MIN_TOUCH_TILE);

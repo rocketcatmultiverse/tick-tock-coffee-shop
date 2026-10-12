@@ -15,6 +15,8 @@
 //
 // While a drag that builds or selects nears the edge of the floor, the camera
 // moves on by itself, so a run of belts can go past what is in view.
+//
+// A click or a tap on the row for sale above the floor goes to buyRow (Q76).
 
 import type { Editor } from './editor';
 import { type Geometry, PAD, type Spot } from './geometry';
@@ -39,6 +41,10 @@ export interface InputHost {
   clickFloor(spot: Spot): void;
   /** A tap holding something: move its ghost there, or put it down. */
   tapHolding(spot: Spot): void;
+  /** The mouse is over the row for sale above the floor. */
+  overRowForSale: boolean;
+  /** A click or a tap on the row for sale. */
+  buyRow(): void;
 }
 
 /** Pixels a press may move before it counts as a drag, not a click or a tap. */
@@ -154,7 +160,11 @@ export function bindInput(canvas: HTMLCanvasElement, host: InputHost): void {
     if (down) {
       mouseDrag(p);
       if (ed.selecting || holdingBelt()) nearEdge(p, mouseDrag);
-    } else host.hover = spotAt(p);
+    } else {
+      host.hover = spotAt(p);
+      host.overRowForSale = host.geo.onRowForSale(p.x, p.y);
+      canvas.style.cursor = host.overRowForSale ? 'pointer' : '';
+    }
     host.render();
   };
 
@@ -166,7 +176,13 @@ export function bindInput(canvas: HTMLCanvasElement, host: InputHost): void {
       return;
     }
     if (e.button !== 0) return;
-    const spot = spotAt(local(e));
+    const p = local(e);
+    if (host.geo.onRowForSale(p.x, p.y)) {
+      host.buyRow();
+      host.render();
+      return;
+    }
+    const spot = spotAt(p);
     if (!spot) return;
     down = true;
     capture(e.pointerId);
@@ -281,10 +297,13 @@ export function bindInput(canvas: HTMLCanvasElement, host: InputHost): void {
       gesture = fingers.size > 0 ? { kind: 'spent' } : { kind: 'none' };
       return;
     }
-    const spot = spotAt(local(e));
+    const at = local(e);
+    const spot = spotAt(at);
     stopEdge();
     if (cancelled) {
       dropOneFinger();
+    } else if (gesture.kind === 'pending' && host.geo.onRowForSale(at.x, at.y)) {
+      host.buyRow();
     } else if (gesture.kind === 'pending' && spot) {
       // A tap.
       if (ed.hand) host.tapHolding(spot);
@@ -321,6 +340,7 @@ export function bindInput(canvas: HTMLCanvasElement, host: InputHost): void {
   canvas.addEventListener('pointerleave', (e) => {
     if (isTouch(e) || down || panning) return;
     host.hover = null;
+    host.overRowForSale = false;
     host.render();
   });
 

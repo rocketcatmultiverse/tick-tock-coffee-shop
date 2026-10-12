@@ -10,12 +10,12 @@ import type { Roast } from '../sim/types';
 import { BREW_TIME, GROWTH, LOOP, WELL_TICK } from '../sim/tuning';
 import { ALL_PIECES, PIECE_LABEL, type PieceKind } from '../game/pieces';
 import { kettleTicks } from '../game/recipes';
-import { FLOOR_ROW_PRICE, HAPPY_LOOPS, ROWS_FOR_SALE_AFTER_HAPPY, START_COINS, START_PIECES, START_ROWS } from '../game/tuning';
+import { FLOOR_ROW_PRICE, HAPPY_LOOPS, START_COINS, START_PIECES, START_ROWS } from '../game/tuning';
 import { spriteImg } from './art/dom';
 import { el } from './el';
 import { pieceKey } from './hotkeys';
 import { PIECE_ICON } from './palette';
-import { tickRange } from './tips';
+import { ROWS_WAIT, tickRange } from './tips';
 
 const ticks = (n: number) => `${n} tick${n === 1 ? '' : 's'}`;
 const ROASTS: Roast[] = ['light', 'medium', 'dark'];
@@ -58,8 +58,6 @@ const BELT_TOUCH = 'carries an item one tile a tick. Tap Lay on the stick and mo
 /** The first pieces in the order a line runs, from the well to the feeder. */
 const LINE_ORDER: PieceKind[] = ['well', 'plot', 'kettle', 'belt'];
 
-const rowsWait =
-  ROWS_FOR_SALE_AFTER_HAPPY === 1 ? 'your first regular is happy' : `your first ${ROWS_FOR_SALE_AFTER_HAPPY} regulars are happy`;
 
 /** The words of every step. Pure, so the tests can read them. */
 export function tourText(stool: StoolExample, words: TourWords = { touch: false, menu: false }): TourText[] {
@@ -121,7 +119,7 @@ export function tourText(stool: StoolExample, words: TourWords = { touch: false,
       lines: [
         `A new shop has ${START_COINS} coins. Pieces cost coins, and regulars pay for their cups.`,
         `Deleting a piece gives back every coin it cost: ${touch ? 'tap it, then Delete' : 'hover it and press Z'}. So try things, and move them about freely.`,
-        `Floor rows cost ${FLOOR_ROW_PRICE} and are not given back. They are for sale once ${rowsWait}; the ${START_ROWS} rows you start with are plenty until then.`,
+        `Floor rows cost ${FLOOR_ROW_PRICE} and are not given back; buy one from the row for sale at the top of the floor. They are for sale once ${ROWS_WAIT}; the ${START_ROWS} rows you start with are plenty until then.`,
       ],
     },
     {
