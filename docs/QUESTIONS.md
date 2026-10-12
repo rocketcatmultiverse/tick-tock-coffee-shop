@@ -690,3 +690,36 @@ with mouse and keyboard. No mobile work." in CLAUDE.md. *Done as:*
 `src/ui/palette.ts`, `src/ui/guide.ts`, `src/ui/tooltip.ts`,
 `src/ui/geometry.ts`, `src/ui/render.ts`, `src/ui/panel.ts`,
 `src/ui/tutorial.ts`, `src/ui/main.ts`, `src/ui/style.css`.
+
+**Q72. A thumb stick for building on a phone.** *Your request:* a thumb
+joystick bottom right; picking a piece puts its ghost in the middle of the
+floor in view, the stick moves it about and scrolls the map; Turn leftmost in
+the tool bar, for the left hand, and Put down next. This replaces Q71's
+aim-and-lift and finger-dragged belts. *Done as:*
+- *the ghost:* on a touch screen, picking a piece from an empty hand puts its
+  ghost on the tile in the middle of the floor in view, outlined in gold; the
+  line under the palette reads that tile. Switching pieces keeps it where it
+  is. Cut and Copy start it on the tile they took from, so moving a piece is
+  tap, Cut, steer, Place;
+- *the stick:* over the floor's bottom right, which is the counter and the
+  stools, not the back room. A push past a third of its reach moves the ghost
+  one tile the way it mostly points (four ways: the floor is a grid), and a
+  held push repeats after 320 ms, every 220 ms just past the dead zone down
+  to 70 ms at the rim. A quick push on the ring is a one-tile nudge. The
+  camera keeps the ghost half a tile inside the floor in view;
+- *placing:* a tap on the knob, which reads Place. Holding a belt it reads
+  Lay: a tap starts a run, moving the ghost lays belts that turn to follow it,
+  exactly as a mouse drag does, and the knob's Stop ends the run, as one undo
+  step. Put down, another piece, Undo or any tool but Turn, Flip and Rules
+  also ends it, keeping what was laid (the editor now does this for Esc and
+  number keys mid-drag too, which used to drop the run from the undo history);
+- *the floor:* holding something, one finger always looks around; a tap on a
+  tile moves the ghost there (laying belts on the way during a run), and a
+  tap on the ghost puts the piece down. Two fingers pan and pinch as before;
+- *the tool bar:* Turn, Put down, Flip, then the rest, on every device.
+*Assumed:* the stick shows only on a touch-first device (`pointer: coarse`)
+while something is in hand; a mouse places on click as before, and a touch
+screen on a computer with a mouse places on tap. The stick covers the
+rightmost stools while it shows.
+`src/ui/joystick.ts`, `src/ui/main.ts` (`tapHolding`, `placeAtCursor`,
+`syncCursor`), `src/ui/input.ts`, `src/ui/editor.ts`, `src/ui/tools.ts`.

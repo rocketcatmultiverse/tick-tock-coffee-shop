@@ -60,6 +60,11 @@ export class Editor {
     return this.redoStack.length > 0;
   }
 
+  /** A run of belts is being laid: press() began it and release() has not yet ended it. */
+  get dragging(): boolean {
+    return this.drag !== null;
+  }
+
   // ---- The hand -------------------------------------------------------------
 
   pick(piece: PieceKind): void {
@@ -67,17 +72,19 @@ export class Editor {
       this.message = 'Not unlocked yet: a regular still to come brings it';
       return;
     }
+    // A run of belts being laid ends here, as one undo step.
+    this.release();
     const dir = this.hand?.type === 'piece' ? this.hand.dir : piece === 'belt' ? 'E' : 'S';
     this.hand = { type: 'piece', piece, dir };
     this.selection = null;
     this.message = '';
   }
 
-  /** Esc: put down whatever is in hand, and drop the selection. */
+  /** Esc: put down whatever is in hand, and drop the selection. A run of belts being laid is kept, as one undo step. */
   putDown(): void {
+    this.release();
     this.hand = null;
     this.selection = null;
-    this.drag = null;
     this.selectFrom = null;
   }
 

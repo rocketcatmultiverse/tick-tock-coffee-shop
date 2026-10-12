@@ -1,7 +1,7 @@
 import './style.css';
 import { clockTick, counterIndex, feederSlot, isPresent, itemName, slotOf, splitterNext, splitterOutputs, structureToken, tileIndex } from '../sim';
-import { MILK_TICK } from '../sim/tuning';
-import type { Layout, Roast } from '../sim/types';
+import { COLS, MILK_TICK } from '../sim/tuning';
+import type { Dir, Layout, Roast } from '../sim/types';
 import { ALL_PIECES, pieceOf } from '../game/pieces';
 import { applyOffline } from '../game/offline';
 import { saveShop } from '../game/save';
@@ -19,6 +19,7 @@ import { Editor } from './editor';
 import { Geometry, MIN_TILE, MIN_TOUCH_TILE, PAD, type Spot } from './geometry';
 import { Guide } from './guide';
 import { bindInput } from './input';
+import { Joystick, stepSpot } from './joystick';
 import { el } from './el';
 import { Shell } from './layout';
 import { Palette } from './palette';
@@ -64,6 +65,8 @@ class App {
   readonly geo = new Geometry();
   hover: Spot | null = null;
   inspect: Spot | null = null;
+  /** On a touch screen, the tile the ghost of what is in hand sits on (Q72). */
+  cursor: Spot | null = null;
   selectMode = false;
   running = true;
   /** The words for the controls: a finger's, or a mouse's and the keys'. */
@@ -83,6 +86,13 @@ class App {
   private guide = new Guide();
   private shell: Shell;
   private regularsPanel = new RegularsPanel();
+  private stick = new Joystick({
+    step: (dir) => this.stepCursor(dir),
+    tap: () => {
+      this.placeAtCursor();
+      this.render();
+    },
+  });
   private tooltip = new Tooltip(tipContent);
   private notes: string[] = [];
   private catCard = new CatCard({
@@ -171,7 +181,7 @@ class App {
       ],
       () => this.tooltip.refresh(),
     );
-    this.floorArea.append(this.canvas);
+    this.floorArea.append(this.canvas, this.stick.root);
     this.shell = new Shell(
       root,
       {
@@ -344,6 +354,99 @@ class App {
     return catSpot(Math.max(0, this.shop.T - 1), this.catSeat() >= 0);
   }
 
+  /** A tap holding something. On a touch screen it moves the ghost there, or puts the piece down if the ghost is there already. */
+  tapHolding(spot: Spot): void {
+    const ed = this.editor;
+    if (spot.row < 0) {
+      ed.message = 'The counter is fixed';
+      return;
+    }
+    // A touch screen on a computer that has a mouse too: a tap puts the piece down where it lands.
+    if (!this.touch) {
+      ed.press(spot.row, spot.col);
+      ed.release();
+      return;
+    }
+    const c = this.cursor;
+    if (c && c.row === spot.row && c.col === spot.col) return this.placeAtCursor();
+    this.moveCursor(spot);
+  }
+
+  /** The stick moved the ghost one tile. */
+  private stepCursor(dir: Dir): void {
+    if (!this.cursor || !this.editor.hand) return;
+    const to = stepSpot(this.cursor, dir, this.shop.layout.rows);
+    if (to.row !== this.cursor.row || to.col !== this.cursor.col) this.moveCursor(to);
+    else this.keepInView(to);
+    this.render();
+  }
+
+  /** Move the ghost to a tile, laying belts on the way if a run is being laid, and bring it into view. */
+  private moveCursor(to: Spot): void {
+    this.cursor = to;
+    if (this.editor.dragging) this.editor.dragTo(to.row, to.col);
+    this.keepInView(to);
+  }
+
+  /**
+   * The knob, or a tap on the ghost: put the piece or group down there.
+   * Holding a belt, the first tap starts a run that follows the ghost and the
+   * next tap ends it, as pressing and releasing the mouse would.
+   */
+  private placeAtCursor(): void {
+    const ed = this.editor;
+    const c = this.cursor;
+    if (!c || !ed.hand) return;
+    const belt = ed.hand.type === 'piece' && ed.hand.piece === 'belt';
+    if (belt && ed.dragging) {
+      ed.release();
+      ed.message = 'Run of belts finished';
+      return;
+    }
+    ed.press(c.row, c.col);
+    if (belt && ed.dragging) ed.message = 'Laying belts: move the stick, then tap Stop';
+  }
+
+  /** The tile in the middle of the floor in view. */
+  private middleSpot(): Spot {
+    const g = this.geo;
+    const clamp = (n: number, hi: number) => Math.max(0, Math.min(hi, n));
+    const col = clamp(Math.floor((g.width / 2 - g.x0) / g.tile), COLS - 1);
+    const row = clamp(Math.floor((g.counterY + g.camY - (PAD + g.counterY) / 2) / g.tile), this.shop.layout.rows - 1);
+    return { row, col };
+  }
+
+  /** Move the camera just enough to show a back-room tile, with half a tile to spare. */
+  private keepInView(spot: Spot): void {
+    const g = this.geo;
+    const { x, y } = g.tileXY(spot.row, spot.col);
+    const spare = g.tile / 2;
+    let dx = 0;
+    let dy = 0;
+    if (x < PAD + spare) dx = PAD + spare - x;
+    else if (x + g.tile > g.width - PAD - spare) dx = g.width - PAD - spare - (x + g.tile);
+    if (y < PAD + spare) dy = PAD + spare - y;
+    else if (y + g.tile > g.counterY - spare) dy = g.counterY - spare - (y + g.tile);
+    g.pan(dx, dy);
+  }
+
+  /**
+   * Keep the ghost in step with the hand: none while the hand is empty; a new
+   * one where a piece was just cut or copied from, else in the middle of the
+   * floor in view.
+   */
+  private syncCursor(): void {
+    if (!this.editor.hand) {
+      this.cursor = null;
+      return;
+    }
+    if (!this.touch || (this.cursor && this.cursor.row < this.shop.layout.rows)) return;
+    const from = this.inspect && this.inspect.row >= 0 ? this.inspect : null;
+    this.cursor = from ?? this.middleSpot();
+    this.inspect = null;
+    this.keepInView(this.cursor);
+  }
+
   clickFloor(spot: Spot): void {
     this.inspect = spot;
     const cat = this.catAt();
@@ -357,6 +460,8 @@ class App {
   /** A button in the tool bar. */
   private tool(id: ToolId): void {
     const ed = this.editor;
+    // Anything but turning or reading the rules ends a run of belts being laid, as one undo step.
+    if (id !== 'turn' && id !== 'flip' && id !== 'info') ed.release();
     const target = this.inspect && this.inspect.row >= 0 ? this.inspect : null;
     // Delete, cut and copy work on the box if there is one, else on the tile last tapped.
     const onTiles = (box: () => void, tile: (r: number, c: number) => void) => {
@@ -461,7 +566,7 @@ class App {
   }
 
   private hoverInfo(): string {
-    const h = this.hover ?? (this.editor.hand ? null : this.inspect);
+    const h = this.hover ?? (this.editor.hand ? this.cursor : this.inspect);
     if (!h) return '';
     const { layout, sim } = this.shop;
     if (h.row === -2) return this.stoolInfo(h.col);
@@ -591,14 +696,17 @@ class App {
       this.canvas.style.height = `${h}px`;
     }
     this.geo.fit(w, h, this.shop.layout.rows, this.touch ? MIN_TOUCH_TILE : MIN_TILE);
+    this.syncCursor();
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const view: View = {
       shop: this.shop,
       editor: this.editor,
       geo: this.geo,
-      hover: this.hover,
+      // A finger's hand shows its ghost where the stick has put it.
+      hover: this.cursor ?? this.hover,
+      ghostCursor: this.cursor !== null,
       inspect: this.inspect,
-      panHint: this.touch ? (this.editor.hand ? 'two fingers to look' : 'drag to look') : 'right-drag or scroll',
+      panHint: this.touch ? 'drag to look' : 'right-drag or scroll',
       readouts: this.readouts,
       stools: this.stools(),
       cat: { spot: this.catAt(), heart: this.catCard.heart, mad: this.catMad() },
@@ -635,6 +743,8 @@ class App {
       inHand: hand ? (hand.type === 'piece' ? hand.piece : 'group') : null,
       keys: !this.touch,
     });
+    const belt = hand?.type === 'piece' && hand.piece === 'belt';
+    this.stick.set(this.cursor !== null, belt ? (this.editor.dragging ? 'Stop' : 'Lay') : 'Place');
     this.tools.update({
       hand: hand ? hand.type : 'none',
       selectMode: this.selectMode,

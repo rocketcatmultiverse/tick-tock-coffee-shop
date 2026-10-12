@@ -9,13 +9,13 @@ describe('The tool bar', () => {
     expect(toolsFor({ hand: 'none', buffer: 3 })).toEqual(['select', 'delete', 'cut', 'copy', 'paste', 'undo', 'redo']);
   });
 
-  it('holding a piece: turn, flip, put down and its rules', () => {
-    expect(toolsFor({ hand: 'piece', buffer: 0 })).toEqual(['turn', 'flip', 'drop', 'info', 'undo', 'redo']);
+  it('holding a piece: turn first and put down next, under the left thumb, then flip and its rules (Q72)', () => {
+    expect(toolsFor({ hand: 'piece', buffer: 0 })).toEqual(['turn', 'drop', 'flip', 'info', 'undo', 'redo']);
   });
 
   it('holding a group: older and newer only when the buffer has more than one entry', () => {
-    expect(toolsFor({ hand: 'group', buffer: 1 })).toEqual(['turn', 'flip', 'drop', 'undo', 'redo']);
-    expect(toolsFor({ hand: 'group', buffer: 2 })).toEqual(['turn', 'flip', 'drop', 'older', 'newer', 'undo', 'redo']);
+    expect(toolsFor({ hand: 'group', buffer: 1 })).toEqual(['turn', 'drop', 'flip', 'undo', 'redo']);
+    expect(toolsFor({ hand: 'group', buffer: 2 })).toEqual(['turn', 'drop', 'flip', 'older', 'newer', 'undo', 'redo']);
   });
 
   it('never more than seven at once, so they fit across a phone', () => {

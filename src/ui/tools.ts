@@ -1,6 +1,6 @@
 // The tool bar: every editing key as a button, for a finger or a mouse
 // (docs/SPEC.md, Spec 4, "Editing keys"; docs/QUESTIONS.md, Q71). It shows
-// what fits the hand: turn, flip and put down while holding something; select,
+// what fits the hand: turn, put down and flip while holding something; select,
 // delete, cut, copy and paste while not; undo and redo always.
 
 import { type IconName, icon } from './art/icons';
@@ -28,7 +28,7 @@ export const TOOLS: Record<ToolId, ToolInfo> = {
     label: 'Put down',
     key: 'Esc or right-click',
     line: 'Empties your hand.',
-    touchLine: 'Empties your hand, so one finger looks around the floor again.',
+    touchLine: 'Empties your hand and puts its ghost away.',
     when: 'held',
   },
   older: { label: 'Older', key: 'Ctrl+wheel', line: 'Holds the next older entry in the paste buffer instead.', when: 'group' },
@@ -66,7 +66,8 @@ export const TOOLS: Record<ToolId, ToolInfo> = {
   redo: { label: 'Redo', key: 'Ctrl+Y', line: 'Does again what Undo took back.', when: 'always' },
 };
 
-const ORDER: ToolId[] = ['turn', 'flip', 'drop', 'older', 'newer', 'info', 'select', 'delete', 'cut', 'copy', 'paste', 'undo', 'redo'];
+/** Turn first and Put down next, under a left thumb, while the right works the stick (Q72). */
+const ORDER: ToolId[] = ['turn', 'drop', 'flip', 'older', 'newer', 'info', 'select', 'delete', 'cut', 'copy', 'paste', 'undo', 'redo'];
 
 const ICON: Record<ToolId, IconName> = {
   turn: 'turn',

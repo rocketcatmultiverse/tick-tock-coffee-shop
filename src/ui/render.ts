@@ -46,6 +46,8 @@ export interface View {
   inspect: Spot | null;
   /** How to move the camera, for the hint at the edge: "right-drag or scroll", "drag". */
   panHint: string;
+  /** `hover` is a finger's ghost, moved by the thumb stick, not the mouse: drawn bolder so it reads at a glance. */
+  ghostCursor: boolean;
   /** Kettle readouts: the tick its input last landed on and the roast that gave. */
   readouts: Map<number, { tick: number; roast: Roast | null }>;
   stools: StoolView[];
@@ -460,8 +462,8 @@ function drawEditing(ctx: CanvasRenderingContext2D, view: View, editor: Editor):
     ctx.restore();
   }
   const { x, y } = geo.tileXY(view.hover.row, view.hover.col);
-  ctx.strokeStyle = ghost?.reason ? PAL.cherry : PAL.cream;
-  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = ghost?.reason ? PAL.cherry : view.ghostCursor ? PAL.gold : PAL.cream;
+  ctx.lineWidth = view.ghostCursor ? 3.5 : 2.5;
   ctx.beginPath();
   ctx.roundRect(x + 2, y + 2, T - 4, T - 4, 8);
   ctx.stroke();

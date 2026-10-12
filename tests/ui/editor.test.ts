@@ -125,4 +125,33 @@ describe('Editor', () => {
     ed.deleteKey(3, 9);
     expect(shop.layout.tiles[tileIndex(3, 9)]).toEqual({ kind: 'bowl' });
   });
+
+  it('putting down mid-run keeps the run, as one undo step', () => {
+    const { shop, ed } = setup();
+    ed.pick('belt');
+    ed.press(1, 2);
+    expect(ed.dragging).toBe(true);
+    ed.dragTo(1, 5);
+    ed.putDown();
+    expect(ed.dragging).toBe(false);
+    expect(ed.hand).toBeNull();
+    expect([2, 3, 4, 5].map((c) => shop.layout.tiles[tileIndex(1, c)]?.kind)).toEqual(['belt', 'belt', 'belt', 'belt']);
+    ed.undo();
+    expect([2, 3, 4, 5].map((c) => shop.layout.tiles[tileIndex(1, c)])).toEqual([null, null, null, null]);
+    expect(shop.till).toBe(START_COINS);
+  });
+
+  it('picking another piece mid-run ends the run, and the new piece lays no belts', () => {
+    const { shop, ed } = setup();
+    ed.pick('belt');
+    ed.press(1, 2);
+    ed.dragTo(1, 3);
+    ed.pick('plot');
+    expect(ed.dragging).toBe(false);
+    ed.dragTo(1, 6);
+    expect(shop.layout.tiles[tileIndex(1, 4)]).toBeNull();
+    ed.undo();
+    expect(shop.layout.tiles[tileIndex(1, 2)]).toBeNull();
+    expect(shop.layout.tiles[tileIndex(1, 3)]).toBeNull();
+  });
 });

@@ -52,6 +52,9 @@ const PIECE_LINE: Partial<Record<PieceKind, string>> = {
   belt: 'carries an item one tile a tick. Drag to lay a run of them.',
 };
 
+/** The belt's line on a touch screen, where the stick lays a run. */
+const BELT_TOUCH = 'carries an item one tile a tick. Tap Lay on the stick and move it to lay a run of them; tap Stop to end it.';
+
 /** The first pieces in the order a line runs, from the well to the feeder. */
 const LINE_ORDER: PieceKind[] = ['well', 'plot', 'kettle', 'belt'];
 
@@ -87,12 +90,12 @@ export function tourText(stool: StoolExample, words: TourWords = { touch: false,
       title: 'Your first four pieces',
       lines: [
         touch
-          ? 'Tap a piece, then tap the floor. Turn it first with Turn in the tool bar: a machine puts out on the side it faces. Press and hold a piece for all its rules.'
+          ? 'Tap a piece: its ghost appears in the middle of the floor. Move it with the stick at the bottom right, and tap Place to put it down. Turn it first with Turn, at the left of the tool bar: a machine puts out on the side it faces. Press and hold a piece for all its rules.'
           : 'Click a piece, or press its number key, then click the floor. Press R to turn it first: a machine puts out on the side it faces. Hover a piece for all its rules.',
       ],
       pieces: LINE_ORDER.filter((p) => START_PIECES.includes(p)).map((piece) => ({
         piece,
-        line: `${PIECE_LABEL[piece]}${touch ? '' : `, key ${key(piece)}`}: ${PIECE_LINE[piece]}`,
+        line: `${PIECE_LABEL[piece]}${touch ? '' : `, key ${key(piece)}`}: ${touch && piece === 'belt' ? BELT_TOUCH : PIECE_LINE[piece]}`,
       })),
     },
     {

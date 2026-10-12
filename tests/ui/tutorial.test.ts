@@ -46,7 +46,10 @@ describe('The tour', () => {
       }
     }
     const text = (id: string) => all(touch.find((s) => s.id === id)!).join(' ');
-    expect(text('pieces')).toMatch(/Tap a piece, then tap the floor/);
+    // The thumb stick places a piece (Q72).
+    expect(text('pieces')).toMatch(/Tap a piece: its ghost appears in the middle of the floor/);
+    expect(text('pieces')).toMatch(/stick at the bottom right, and tap Place/);
+    expect(text('pieces')).toMatch(/Tap Lay on the stick/);
     expect(text('coins')).toMatch(/tap it, then Delete/);
     expect(text('regular')).toMatch(/Tap the underlined drink/);
     // Still in the order a line runs.

@@ -6,12 +6,12 @@
 // the wheel move the camera; a right-click that does not move puts down what
 // is in hand. The number keys pick from the build palette (hotkeys.ts).
 //
-// A finger: with nothing in hand, a drag looks around and a tap inspects the
-// tile (or names the cat). Holding a belt, a drag lays a run of them. Holding
-// anything else, the ghost follows the finger and the piece goes down where
-// the finger lifts; lifting off the floor puts nothing down. With the Select
-// tool on, a drag draws the box. Two fingers always look around and pinch to
-// zoom, and cancel whatever one finger had started.
+// A finger: a drag looks around, and with the Select tool on draws the box.
+// A tap with nothing in hand inspects the tile (or names the cat); holding
+// something, it moves the ghost there, or puts the piece down if the ghost is
+// already there. The thumb stick does the rest (joystick.ts, Q72). Two
+// fingers always look around and pinch to zoom, and cancel whatever one
+// finger had started.
 //
 // While a drag that builds or selects nears the edge of the floor, the camera
 // moves on by itself, so a run of belts can go past what is in view.
@@ -37,6 +37,8 @@ export interface InputHost {
   zoom(x: number, y: number, factor: number): void;
   /** A click or tap with nothing in hand: inspect the tile, and things on the floor such as the cat. */
   clickFloor(spot: Spot): void;
+  /** A tap holding something: move its ghost there, or put it down. */
+  tapHolding(spot: Spot): void;
 }
 
 /** Pixels a press may move before it counts as a drag, not a click or a tap. */
@@ -56,8 +58,6 @@ type TouchGesture =
   | { kind: 'none' }
   | { kind: 'pending'; start: Point; last: Point }
   | { kind: 'look'; last: Point }
-  | { kind: 'belt' }
-  | { kind: 'aim' }
   | { kind: 'select' }
   | { kind: 'two'; mid: Point; dist: number }
   | { kind: 'spent' };
@@ -212,25 +212,16 @@ export function bindInput(canvas: HTMLCanvasElement, host: InputHost): void {
     return { mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, dist: Math.hypot(a.x - b.x, a.y - b.y) };
   };
 
-  /** What one finger is doing at `p`, once it is a drag. */
-  const fingerDrag = (p: Point) => {
+  /** A finger drawing the box is at `p`. */
+  const fingerSelect = (p: Point) => {
     const spot = spotAt(p);
-    if (gesture.kind === 'belt') {
-      host.hover = spot;
-      if (spot && spot.row >= 0) ed.dragTo(spot.row, spot.col);
-    } else if (gesture.kind === 'aim') {
-      host.hover = spot;
-    } else if (gesture.kind === 'select') {
-      if (spot && spot.row >= 0) ed.selectTo(spot.row, spot.col);
-    }
+    if (spot && spot.row >= 0) ed.selectTo(spot.row, spot.col);
   };
 
-  /** A second finger landed, or the gesture was cancelled: stop what one finger was doing, keeping what it built. */
+  /** A second finger landed, or the gesture was cancelled: stop what one finger was doing. */
   const dropOneFinger = () => {
     stopEdge();
-    if (gesture.kind === 'belt') ed.release();
     if (gesture.kind === 'select') ed.endSelect();
-    host.hover = null;
   };
 
   const touchDown = (e: PointerEvent) => {
@@ -241,14 +232,7 @@ export function bindInput(canvas: HTMLCanvasElement, host: InputHost): void {
       dropOneFinger();
       gesture = { kind: 'two', ...twoFingers() };
     } else if (fingers.size === 1) {
-      // Holding a piece, its ghost shows under the finger at once; it goes down on lift.
-      if (ed.hand && !holdingBelt() && !host.selectMode) {
-        gesture = { kind: 'aim' };
-        host.hover = spotAt(p);
-      } else {
-        gesture = { kind: 'pending', start: p, last: p };
-        if (holdingBelt()) host.hover = spotAt(p);
-      }
+      gesture = { kind: 'pending', start: p, last: p };
     }
     host.render();
   };
@@ -273,9 +257,6 @@ export function bindInput(canvas: HTMLCanvasElement, host: InputHost): void {
           ed.beginSelect(start.row, start.col);
         }
         gesture = { kind: 'select' };
-      } else if (holdingBelt()) {
-        if (start && start.row >= 0) ed.press(start.row, start.col);
-        gesture = { kind: 'belt' };
       } else {
         gesture = { kind: 'look', last: gesture.start };
       }
@@ -285,9 +266,9 @@ export function bindInput(canvas: HTMLCanvasElement, host: InputHost): void {
       gesture = { kind: 'look', last: p };
       return;
     }
-    if (gesture.kind === 'belt' || gesture.kind === 'aim' || gesture.kind === 'select') {
-      fingerDrag(p);
-      nearEdge(p, fingerDrag);
+    if (gesture.kind === 'select') {
+      fingerSelect(p);
+      nearEdge(p, fingerSelect);
       host.render();
     }
   };
@@ -306,25 +287,15 @@ export function bindInput(canvas: HTMLCanvasElement, host: InputHost): void {
       dropOneFinger();
     } else if (gesture.kind === 'pending' && spot) {
       // A tap.
-      if (holdingBelt() && !host.selectMode) {
-        if (spot.row >= 0) {
-          ed.press(spot.row, spot.col);
-          ed.release();
-        } else ed.message = 'The counter is fixed';
-      } else {
+      if (ed.hand) host.tapHolding(spot);
+      else {
         ed.selection = null;
         host.clickFloor(spot);
       }
-    } else if (gesture.kind === 'aim') {
-      if (spot && spot.row >= 0) ed.press(spot.row, spot.col);
-      else ed.message = spot ? 'The counter is fixed' : 'Lift your finger on the floor to put it down';
-    } else if (gesture.kind === 'belt') {
-      ed.release();
     } else if (gesture.kind === 'select') {
       ed.endSelect();
     }
     gesture = { kind: 'none' };
-    host.hover = null;
     host.render();
   };
 
