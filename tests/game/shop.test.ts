@@ -42,6 +42,26 @@ describe('Shop', () => {
     for (let k = 1; k < arrivals.length; k++) expect(arrivals[k][0]).toBeGreaterThan(arrivals[k - 1][0]);
   });
 
+  it('the tick a regular walks in, its report says who, and what they bring to the palette', () => {
+    // A player's shop, not a debug one, which has every piece from the start. The layout needs only
+    // the first pieces and one well, but more coins than a new shop has.
+    const shop = new Shop({ defs: REGULARS.slice(0, 4) });
+    shop.till = 1000;
+    expect(shop.build(layoutChanges('all-four')).ok).toBe(true);
+    const walkIns: { at: number; id: string; unlocked: string[]; wellLimit: number | null }[] = [];
+    for (let k = 0; k < 120; k++) {
+      const before = shop.regulars.length;
+      const report = shop.tick();
+      // A report names a walk-in exactly when the regulars grow.
+      expect(report.walkedIn !== null, `tick ${report.T}`).toBe(shop.regulars.length > before);
+      if (report.walkedIn) walkIns.push({ at: report.T, id: report.walkedIn.def.id, unlocked: report.walkedIn.unlocked, wellLimit: report.walkedIn.wellLimit });
+    }
+    expect(walkIns.map((w) => w.id)).toEqual(['sweep', 'clockmaker', 'gargoyle']);
+    expect(walkIns.find((w) => w.id === 'clockmaker')!.unlocked).toEqual(['spring']);
+    expect(walkIns.find((w) => w.id === 'sweep')!.unlocked).toEqual([]);
+    expect(walkIns.every((w) => w.wellLimit === null)).toBe(true);
+  });
+
   it('pays the plain price, the Just in Time bonus, and the clockmaker in gears', () => {
     const shop = new Shop({ defs: REGULARS, debug: true });
     shop.build(layoutChanges('all-four'));

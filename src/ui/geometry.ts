@@ -132,6 +132,13 @@ export class Geometry {
     return { left: Math.floor(this.camX / this.tile + 0.25), right: Math.floor((this.maxCamX - this.camX) / this.tile + 0.25) };
   }
 
+  /** Move the camera to put column `col` in the middle, and back-room row `row` too unless it is null; kept inside the floor. */
+  centerOn(row: number | null, col: number): void {
+    this.camX = PAD + (col + 0.5) * this.tile - this.width / 2;
+    if (row !== null) this.camY = (PAD + this.counterY) / 2 - this.counterY + (row + 0.5) * this.tile;
+    this.pan(0, 0);
+  }
+
   /** Move the camera by a drag of (dx, dy) pixels, kept inside the floor. */
   pan(dx: number, dy: number): void {
     this.camY = Math.max(0, Math.min(this.maxCamY, this.camY + dy));

@@ -18,6 +18,7 @@ export const FLOOR_MARKS: string[] = [
   'The numbers riding the feeder and the counter are slots. A cup keeps its slot all the way along, and each extra tile in its line makes it ride one slot later.',
   'A stool reads t9 · s9: its regular wants a cup on tick 9, which is the cup in slot 9. An any-tick regular reads any, and the slot they last took a cup from.',
   `Under the portrait, from the floor as it runs: ● Just in Time, ◐ served, ✕ a miss. The pips are loops in a row with their cup; ${HAPPY_LOOPS} make a regular happy.`,
+  'A stool tagged new is a regular who has not had a cup since walking in.',
   "A kettle's needle points at the tick its last input landed on. A roaster's tag counts the ticks its batch has been in; a spring's counts what is inside.",
   'Splitter edges: yellow for its outputs, green where the next item goes, red where it would spill.',
   'A splash is an item spilled on that tick.',

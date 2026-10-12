@@ -320,6 +320,8 @@ function drawStools(ctx: CanvasRenderingContext2D, view: View): void {
     if (!st.present || st.status === 'waiting') ctx.globalAlpha = 0.45;
     drawPortrait(ctx, view, st.id, cx - d / 2, top + 8, d);
     ctx.restore();
+    // A regular not yet served since walking in wears a tag, so a new stool is easy to find (Q74).
+    if (st.status === 'new') tag(ctx, 'new', x + 3, top + 3, PAL.gold, tileFont(T, 11));
     if (st.servedNow) {
       ctx.strokeStyle = PAL.gold;
       ctx.lineWidth = 3;

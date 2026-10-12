@@ -120,6 +120,23 @@ describe('Geometry', () => {
     expect(g.hitTest(at.x, at.y)).toEqual(before);
   });
 
+  it('centres the camera on a column, or a back-room tile, as far as the floor goes', () => {
+    const g = new Geometry();
+    g.fit(300, 420, 16, MIN_TOUCH_TILE);
+    const mid = (col: number) => g.x0 + (col + 0.5) * g.tile;
+    g.centerOn(null, 6);
+    expect(Math.abs(mid(6) - 150)).toBeLessThan(1);
+    // Column 11 cannot be centred: the camera stops at the floor's edge.
+    g.centerOn(null, 11);
+    expect(g.camX).toBe(g.maxCamX);
+    g.centerOn(10, 3);
+    const { y } = g.tileXY(10, 3);
+    expect(Math.abs(y + g.tile / 2 - (PAD + g.counterY) / 2)).toBeLessThan(1);
+    g.centerOn(0, 0);
+    expect(g.camY).toBe(0);
+    expect(g.camX).toBe(0);
+  });
+
   it('the zoom stays between ZOOM_MIN_TILE and ZOOM_MAX_TILE, and lasts through a refit', () => {
     const g = new Geometry();
     g.fit(360, 600, 6, MIN_TOUCH_TILE);

@@ -6,7 +6,7 @@ import { adaptState, emptyState, itemName, step, visitLength, visitOffset } from
 import type { Drink, Item, Layout, RegularDef, Seat, SimEvent, SimState } from '../sim/types';
 import { COLS, LOOP, MILK_TICK } from '../sim/tuning';
 import { type BuildPlan, type BuildRights, type TileChange, brokenChute, floorValue, planBuild, rightsAfter, startLayout, tileValue } from './build';
-import { PIECE_LABEL, isFixed } from './pieces';
+import { ALL_PIECES, PIECE_LABEL, type PieceKind, isFixed } from './pieces';
 import { type RegularState, isMilkDrinker, seatFor } from './regulars';
 import {
   ANY_TICK_WAITING,
@@ -38,10 +38,30 @@ export interface RowRefund {
   coins: number;
 }
 
+/** A regular who just walked in, and what they brought with them. */
+export interface WalkIn {
+  def: RegularDef;
+  /** Pieces new in the palette, in palette order. */
+  unlocked: PieceKind[];
+  /** The new limit on wells, if they raised it. */
+  wellLimit: number | null;
+}
+
+/** A walk-in as a line for the happenings: who, their introduction, and what they bring. */
+export function walkInNote(w: WalkIn): string {
+  const arrives = w.def.bowl ? `${w.def.name} starts asking for warm milk at the bowl` : `${w.def.name} walks in`;
+  const extra: string[] = [];
+  if (w.unlocked.length) extra.push(`New in the palette: ${w.unlocked.map((p) => PIECE_LABEL[p]).join(', ')}.`);
+  if (w.wellLimit !== null) extra.push(`You may now own ${w.wellLimit} wells.`);
+  return [`${arrives}: "${w.def.intro}"`, ...extra].join(' ');
+}
+
 export interface TickReport {
   T: number;
   events: SimEvent[];
   notes: string[];
+  /** The regular who walked in at the end of this tick's loop, if one did. */
+  walkedIn: WalkIn | null;
 }
 
 export class Shop {
@@ -215,6 +235,7 @@ export class Shop {
     });
 
     // At each loop's end, count who had their cup; the next regular walks in only when everyone is happy.
+    let walkedIn: WalkIn | null = null;
     if (T % LOOP === LOOP - 1) {
       this.regulars.forEach((_, i) => {
         const wasHappy = this.isHappy(i);
@@ -222,12 +243,13 @@ export class Shop {
         this.servedThisLoop[i] = false;
         if (this.isHappy(i) && !wasHappy) notes.push(`${this.defs[i].name} is happy.`);
       });
-      if (this.regulars.length < this.defs.length && this.regulars.every((_, i) => this.isHappy(i))) notes.push(this.walkIn());
+      if (this.regulars.length < this.defs.length && this.regulars.every((_, i) => this.isHappy(i))) walkedIn = this.walkIn();
     }
+    if (walkedIn) notes.push(walkInNote(walkedIn));
 
     this.spillsThisLoop += spills;
     this.lastEvents = events;
-    return { T, events, notes };
+    return { T, events, notes, walkedIn };
   }
 
   /** Pails in the standing milk order: one per milk drinker who has walked in. */
@@ -266,7 +288,7 @@ export class Shop {
   }
 
   /** The next regular walks in with their stool, and anything they unlock. */
-  private walkIn(): string {
+  private walkIn(): WalkIn {
     const before = this.rights();
     const def = this.defs[this.regulars.length];
     this.regulars.push({ id: def.id, status: 'new', loyalty: 0 });
@@ -275,12 +297,11 @@ export class Shop {
     this.servedThisLoop.push(false);
     this.sim = adaptState(this.layout, this.layout, this.sim, this.regulars.length);
     const after = this.rights();
-    const extra: string[] = [];
-    const fresh = [...after.unlocked].filter((p) => !before.unlocked.has(p));
-    if (fresh.length) extra.push(`New in the palette: ${fresh.map((p) => PIECE_LABEL[p]).join(', ')}.`);
-    if (after.wellLimit > before.wellLimit) extra.push(`You may now own ${after.wellLimit} wells.`);
-    const arrives = def.bowl ? `${def.name} starts asking for warm milk at the bowl` : `${def.name} walks in`;
-    return [`${arrives}: "${def.intro}"`, ...extra].join(' ');
+    return {
+      def,
+      unlocked: ALL_PIECES.filter((p) => after.unlocked.has(p) && !before.unlocked.has(p)),
+      wellLimit: after.wellLimit > before.wellLimit ? after.wellLimit : null,
+    };
   }
 
   /** Check an edit; if it is allowed, apply it to the live floor and pay for it. */

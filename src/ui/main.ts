@@ -1,14 +1,14 @@
 import './style.css';
 import { clockTick, counterIndex, feederSlot, isPresent, itemName, slotOf, splitterNext, splitterOutputs, structureToken, tileIndex } from '../sim';
 import { COLS, MILK_TICK } from '../sim/tuning';
-import type { Dir, Layout, Roast } from '../sim/types';
+import type { Dir, Layout, RegularDef, Roast } from '../sim/types';
 import { ALL_PIECES, pieceOf } from '../game/pieces';
 import { applyOffline } from '../game/offline';
 import { saveShop } from '../game/save';
 import { type Progress, type ShopStats, decodeShare, isBehind, progressOf, shopStats, shopTitle, visitShop } from '../game/share';
 import { type RowRefund, Shop } from '../game/shop';
 import { type StripCell, counterStrip } from '../game/strip';
-import { HAPPY_LOOPS, PIECE_PRICE, START_COINS, START_PIECES } from '../game/tuning';
+import { BOWL_COL, BOWL_ROW, HAPPY_LOOPS, PIECE_PRICE, START_COINS, START_PIECES } from '../game/tuning';
 import { REGULARS } from '../levels/regulars';
 import { catSpot } from './cat';
 import { CatCard } from './catCard';
@@ -30,6 +30,7 @@ import { ShareCard, VisitBanner, leaveVisit, showSpoilerWarning } from './share'
 import { downloadSave, showSlotScreen } from './slots';
 import { SLOTS, migrateLegacySave, openSlot, writeSave } from './storage';
 import { tipContent } from './tips';
+import { Toast } from './toast';
 import { type ToolId, Tools } from './tools';
 import { Tooltip } from './tooltip';
 import { type Box, type StoolExample, type TourStepId, TOUR_STEPS, Tour, offerTour } from './tutorial';
@@ -115,6 +116,8 @@ class App {
   private readonly slot: number | null;
   private leaving = false;
   private tour: Tour | null = null;
+  /** Says when a regular walks in, at the top of the floor. */
+  private toast: Toast;
 
   /**
    * Opens the player's own shop from a save slot (a new one if the slot is
@@ -181,7 +184,8 @@ class App {
       ],
       () => this.tooltip.refresh(),
     );
-    this.floorArea.append(this.canvas);
+    this.toast = new Toast(this.touch, (def) => this.lookAtSeat(def));
+    this.floorArea.append(this.canvas, this.toast.root);
     this.shell = new Shell(
       root,
       {
@@ -563,6 +567,15 @@ class App {
       if (e.type === 'brew') this.readouts.set(e.at, { tick: e.tick, roast: 'roast' in e.item ? e.item.roast : null });
     }
     this.notes = [...report.notes.map((n) => `${report.T % 12}: ${n}`).reverse(), ...this.notes].slice(0, NOTES_KEPT);
+    if (report.walkedIn) this.toast.walkIn(report.walkedIn);
+    this.render();
+  }
+
+  /** Bring a regular's stool into view, or the cat's bowl. */
+  private lookAtSeat(def: RegularDef): void {
+    if (def.bowl) this.geo.centerOn(BOWL_ROW, BOWL_COL);
+    else this.geo.centerOn(null, def.col);
+    this.shell.closeDrawer();
     this.render();
   }
 

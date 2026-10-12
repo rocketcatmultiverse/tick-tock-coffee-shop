@@ -749,3 +749,24 @@ out when it would not change the ghost. *Done as:*
   greyed for the pieces that face no way, as you asked only about Flip.
 `src/ui/layout.ts` (`setHolding`), `src/ui/tools.ts`, `src/ui/editor.ts`,
 `src/ui/palette.ts`, `src/ui/style.css`.
+
+**Q74. Saying when a regular walks in.** *Your request:* on a phone it is
+hard to see a new regular arrive, especially when their stool is off screen;
+a toast at least, on desktop too. *Done as:*
+- *the game says so:* `Shop.tick()`'s report has a `walkedIn` field: the
+  regular, the pieces new in the palette and any new well limit, or null.
+  The happenings line is made from it as before (`walkInNote`). The UI reads
+  the report, not the count of regulars (`tests/game/shop.test.ts`);
+- *the toast:* a card at the top of the floor with their portrait, name,
+  order, tick, slot and stool (the cat: its bowl), and anything new in the
+  palette. A tap or click on it scrolls the floor to centre their stool, or
+  the bowl, closing the drawer if it is open; the cross puts it away. It
+  stays 10 seconds, counted only while the page is in sight, so a walk-in
+  while the tab was hidden is still there on return. One at a time: walk-ins
+  come at most once a loop;
+- *on the floor:* a stool whose regular has not had a cup since walking in
+  (status new) wears a small "new" tag, until their first cup.
+*Assumed:* only walk-ins get a toast; a regular turning happy or waiting
+stays a line in Happenings. No sound or motion (CLAUDE.md, scope).
+`src/game/shop.ts`, `src/ui/toast.ts`, `src/ui/main.ts` (`lookAtSeat`),
+`src/ui/geometry.ts` (`centerOn`), `src/ui/render.ts`.
