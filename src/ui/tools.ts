@@ -1,7 +1,8 @@
 // The tool bar: every editing key as a button, for a finger or a mouse
 // (docs/SPEC.md, Spec 4, "Editing keys"; docs/QUESTIONS.md, Q71). It shows
 // what fits the hand: turn, put down and flip while holding something; select,
-// delete, cut, copy and paste while not; undo and redo always.
+// delete, cut, copy and paste while not; undo and redo always, except beside
+// the thumb stick, which takes their place (Q73).
 
 import { type IconName, icon } from './art/icons';
 import { el } from './el';
@@ -92,17 +93,24 @@ export interface ToolModel {
   buffer: number;
   canUndo: boolean;
   canRedo: boolean;
+  /** Whether a flip would change what is in hand; Flip is greyed out when not. */
+  canFlip: boolean;
+  /** The thumb stick shares the tool bar's row: only Turn, Put down, Flip and the buffer's steps show. */
+  stick: boolean;
 }
 
+/** Beside the thumb stick there is room for what steers the ghost and nothing else. */
+const BESIDE_STICK: ReadonlySet<ToolId> = new Set<ToolId>(['turn', 'drop', 'flip', 'older', 'newer']);
+
 /** The tools that show for this hand, in bar order. */
-export function toolsFor(m: Pick<ToolModel, 'hand' | 'buffer'>): ToolId[] {
+export function toolsFor(m: Pick<ToolModel, 'hand' | 'buffer'> & { stick?: boolean }): ToolId[] {
   const shows = (w: When) =>
     w === 'always' ||
     (w === 'held' && m.hand !== 'none') ||
     (w === 'group' && m.hand === 'group' && m.buffer > 1) ||
     (w === 'piece' && m.hand === 'piece') ||
     (w === 'empty' && m.hand === 'none');
-  return ORDER.filter((id) => shows(TOOLS[id].when));
+  return ORDER.filter((id) => shows(TOOLS[id].when) && (!m.stick || BESIDE_STICK.has(id)));
 }
 
 export class Tools {
@@ -115,7 +123,7 @@ export class Tools {
     this.root.setAttribute('role', 'toolbar');
     this.root.setAttribute('aria-label', 'Tools');
     for (const id of ORDER) {
-      const b = el('button', { className: 'tool' }, icon(ICON[id]), el('span', { className: 'tool-label', textContent: TOOLS[id].label }));
+      const b = el('button', { className: `tool tool-${id}` }, icon(ICON[id]), el('span', { className: 'tool-label', textContent: TOOLS[id].label }));
       b.setAttribute('aria-label', TOOLS[id].label);
       b.dataset.tip = `tool:${id}`;
       b.onclick = () => act(id);
@@ -140,6 +148,7 @@ export class Tools {
     const select = this.buttons.get('select')!;
     select.classList.toggle('active', m.selectMode);
     select.setAttribute('aria-pressed', String(m.selectMode));
+    this.buttons.get('flip')!.disabled = !m.canFlip;
     this.buttons.get('undo')!.disabled = !m.canUndo;
     this.buttons.get('redo')!.disabled = !m.canRedo;
     this.badge.textContent = m.buffer ? String(m.buffer) : '';

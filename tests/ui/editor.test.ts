@@ -126,6 +126,40 @@ describe('Editor', () => {
     expect(shop.layout.tiles[tileIndex(3, 9)]).toEqual({ kind: 'bowl' });
   });
 
+  it('a flip that would change nothing is not offered (Q73)', () => {
+    const { shop, ed } = setup();
+    expect(ed.canFlip).toBe(false);
+    ed.pick('kettle');
+    // Facing south, a mirror left to right leaves it as it is.
+    expect(ed.hand).toMatchObject({ dir: 'S' });
+    expect(ed.canFlip).toBe(false);
+    ed.rotateHand();
+    expect(ed.hand).toMatchObject({ dir: 'W' });
+    expect(ed.canFlip).toBe(true);
+    // A well faces no way at all, however it was turned.
+    ed.pick('well');
+    ed.rotateHand();
+    expect(ed.canFlip).toBe(false);
+    // A group is offered a flip unless it is its own mirror image.
+    ed.pick('belt');
+    ed.press(1, 2);
+    ed.dragTo(1, 4);
+    ed.release();
+    ed.putDown();
+    ed.copy('hover', 1, 3);
+    expect(ed.hand?.type).toBe('group');
+    expect(ed.canFlip).toBe(true);
+    ed.putDown();
+    ed.pick('plot');
+    ed.press(2, 6);
+    ed.press(3, 6);
+    ed.putDown();
+    ed.selection = { r0: 2, r1: 3, c0: 6, c1: 6 };
+    ed.copy('box');
+    expect(shop.layout.tiles[tileIndex(2, 6)]?.kind).toBe('plot');
+    expect(ed.canFlip).toBe(false);
+  });
+
   it('putting down mid-run keeps the run, as one undo step', () => {
     const { shop, ed } = setup();
     ed.pick('belt');

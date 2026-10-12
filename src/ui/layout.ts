@@ -14,6 +14,12 @@
 //
 // The panels are built once and moved between these places, so nothing in
 // them is lost when the window changes shape.
+//
+// The thumb stick (joystick.ts) takes the bottom right corner of the screen
+// while a finger holds something: in tall across the tool bar and the
+// palette, which narrow beside it; in flat at the foot of the column, with
+// the tool bar beside it. In wide it sits over the floor's bottom right,
+// since the corner of the screen is the tabs (Q73).
 
 import { icon } from './art/icons';
 import { el } from './el';
@@ -46,6 +52,7 @@ export interface ShellParts {
   tools: HTMLElement;
   palette: HTMLElement;
   info: HTMLElement;
+  stick: HTMLElement;
 }
 
 export class Shell {
@@ -76,7 +83,8 @@ export class Shell {
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') this.closeDrawer();
     });
-    this.arrange();
+    // The first arrangement is the page being built: whoever built the shell draws it once it is done.
+    this.arrange(false);
   }
 
   get compact(): boolean {
@@ -87,8 +95,8 @@ export class Shell {
     return this.side.classList.contains('open');
   }
 
-  /** Put every panel where this window's layout wants it. */
-  arrange(): void {
+  /** Put every panel where this window's layout wants it, and say so if anything moved. */
+  arrange(notify = true): void {
     const mode = layoutFor(window.innerWidth, window.innerHeight);
     const short = mode === 'wide' && window.innerHeight < SHORT_HEIGHT;
     this.root.className = `layout-${mode}${mode === 'wide' ? '' : ' compact'}${short ? ' short' : ''}`;
@@ -101,6 +109,7 @@ export class Shell {
       this.side.replaceChildren(p.title, ...visit, p.clock, p.till, p.next, p.tabs);
       this.build.replaceChildren(p.palette, p.info);
       this.dock.replaceChildren(this.build);
+      p.floor.append(p.stick);
       this.root.replaceChildren(p.tools, p.floor, this.dock, this.side);
     } else {
       this.head.replaceChildren(p.title, this.close);
@@ -108,15 +117,20 @@ export class Shell {
       if (mode === 'tall') {
         this.top.replaceChildren(p.clock, this.menu);
         this.status.replaceChildren(p.coins, p.info);
-        this.dock.replaceChildren(this.status, p.tools, p.palette);
+        this.dock.replaceChildren(this.status, p.tools, p.palette, p.stick);
         this.root.replaceChildren(this.top, p.floor, this.dock, this.backdrop, this.side);
       } else {
         this.coinsRow.replaceChildren(p.coins, this.menu);
-        this.dock.replaceChildren(p.clock, this.coinsRow, p.info, p.tools, p.palette);
+        this.dock.replaceChildren(p.clock, this.coinsRow, p.info, p.tools, p.palette, p.stick);
         this.root.replaceChildren(p.floor, this.dock, this.backdrop, this.side);
       }
     }
-    this.changed();
+    if (notify) this.changed();
+  }
+
+  /** While the thumb stick shows, the dock makes room for it in the corner. */
+  setHolding(holding: boolean): void {
+    this.dock.classList.toggle('holding', holding);
   }
 
   /** Slide the drawer in over the floor. The wide layout has no drawer: its column is always there. */

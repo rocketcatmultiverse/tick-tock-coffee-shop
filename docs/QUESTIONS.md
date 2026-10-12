@@ -723,3 +723,29 @@ screen on a computer with a mouse places on tap. The stick covers the
 rightmost stools while it shows.
 `src/ui/joystick.ts`, `src/ui/main.ts` (`tapHolding`, `placeAtCursor`,
 `syncCursor`), `src/ui/input.ts`, `src/ui/editor.ts`, `src/ui/tools.ts`.
+
+**Q73. The stick in the corner, a red Put down, and Flip only when it does
+something.** *Your request:* the thumb stick at the absolute bottom right,
+over the build menu and the rightmost tools (Undo, Redo and Rules may go:
+only Turn and Put down are needed); Put down in a distinct colour; Flip greyed
+out when it would not change the ghost. *Done as:*
+- *the corner:* held upright (tall), the dock turns into a grid while a
+  finger holds something: the stick, 110 pixels, spans the tool bar and the
+  palette rows in the bottom right corner, and those rows narrow beside it.
+  Nothing is hidden under it: the palette pages again to fit (two pieces a
+  page on a 375-pixel phone) and turns to the page of the piece in hand, and
+  the tool bar shows only Turn, Put down and Flip, plus Older and Newer for a
+  group from the buffer. On its side (flat), the stick sits at the foot of the
+  right-hand column with those tools beside it, and the palette keeps the
+  column's width above. In wide, on a tablet, it stays over the floor's
+  bottom right, since the screen's corner is the tabs there, and the tool bar
+  down the floor's left keeps everything. Undo, Redo and Rules come back as
+  soon as the hand is empty;
+- *Put down* is cherry red, on every device;
+- *Flip* is greyed out when a flip would change nothing: a well, a side door
+  or a splitter, which face no way; any other piece facing north or south,
+  which a mirror left to right leaves as it is; and a group from the buffer
+  that is its own mirror image. `Editor.canFlip`. *Assumed:* Turn is not
+  greyed for the pieces that face no way, as you asked only about Flip.
+`src/ui/layout.ts` (`setHolding`), `src/ui/tools.ts`, `src/ui/editor.ts`,
+`src/ui/palette.ts`, `src/ui/style.css`.

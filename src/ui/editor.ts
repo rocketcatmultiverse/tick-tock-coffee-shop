@@ -12,6 +12,7 @@ import {
   type Entry,
   entryFromTiles,
   flip,
+  normalize,
   pasteChanges,
   pushEntry,
   rotate,
@@ -19,6 +20,9 @@ import {
 } from './buffer';
 
 export type Hand = { type: 'piece'; piece: PieceKind; dir: Dir } | { type: 'group'; entry: Entry } | null;
+
+/** Pieces that face no way: turning or flipping one changes nothing. */
+const FACELESS: ReadonlySet<PieceKind> = new Set<PieceKind>(['well', 'door', 'splitter']);
 
 /** Inclusive rectangle of back-room tiles. */
 export interface Rect {
@@ -96,6 +100,14 @@ export class Editor {
   flipHand(): void {
     if (this.hand?.type === 'piece') this.hand = { ...this.hand, dir: flipDir(this.hand.dir) };
     else if (this.hand?.type === 'group') this.hand = { type: 'group', entry: flip(this.hand.entry) };
+  }
+
+  /** Whether a flip would change what is in hand: a piece facing east or west, or a group that is not its own mirror image. */
+  get canFlip(): boolean {
+    const h = this.hand;
+    if (h?.type === 'piece') return !FACELESS.has(h.piece) && flipDir(h.dir) !== h.dir;
+    if (h?.type === 'group') return JSON.stringify(flip(h.entry)) !== JSON.stringify(normalize(h.entry));
+    return false;
   }
 
   /** Ctrl+V: pick the current buffer entry back up. */

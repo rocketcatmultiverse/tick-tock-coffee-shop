@@ -18,6 +18,11 @@ describe('The tool bar', () => {
     expect(toolsFor({ hand: 'group', buffer: 2 })).toEqual(['turn', 'drop', 'flip', 'older', 'newer', 'undo', 'redo']);
   });
 
+  it('beside the thumb stick, only what steers the ghost (Q73)', () => {
+    expect(toolsFor({ hand: 'piece', buffer: 3, stick: true })).toEqual(['turn', 'drop', 'flip']);
+    expect(toolsFor({ hand: 'group', buffer: 3, stick: true })).toEqual(['turn', 'drop', 'flip', 'older', 'newer']);
+  });
+
   it('never more than seven at once, so they fit across a phone', () => {
     for (const hand of ['none', 'piece', 'group'] as const) {
       for (const buffer of [0, 1, 10]) expect(toolsFor({ hand, buffer }).length).toBeLessThanOrEqual(7);

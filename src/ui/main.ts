@@ -181,7 +181,7 @@ class App {
       ],
       () => this.tooltip.refresh(),
     );
-    this.floorArea.append(this.canvas, this.stick.root);
+    this.floorArea.append(this.canvas);
     this.shell = new Shell(
       root,
       {
@@ -196,6 +196,7 @@ class App {
         tools: this.tools.root,
         palette: this.palette.root,
         info: this.panel.info,
+        stick: this.stick.root,
       },
       () => this.render(),
     );
@@ -744,9 +745,14 @@ class App {
       keys: !this.touch,
     });
     const belt = hand?.type === 'piece' && hand.piece === 'belt';
-    this.stick.set(this.cursor !== null, belt ? (this.editor.dragging ? 'Stop' : 'Lay') : 'Place');
+    const steering = this.cursor !== null;
+    this.stick.set(steering, belt ? (this.editor.dragging ? 'Stop' : 'Lay') : 'Place');
+    this.shell.setHolding(steering);
     this.tools.update({
       hand: hand ? hand.type : 'none',
+      canFlip: this.editor.canFlip,
+      // Beside the stick, in a narrow window, only what steers the ghost fits.
+      stick: steering && this.shell.compact,
       selectMode: this.selectMode,
       buffer: this.editor.buffer.entries.length,
       canUndo: this.editor.canUndo,

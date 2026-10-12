@@ -172,8 +172,9 @@ export class Palette {
     const fit = paletteFit(ALL_PIECES.length, w, h, piece, gap, arrow, fill);
     const first = this.page * this.fit.perPage;
     this.fit = fit;
-    // Keep the first piece that was showing in view.
-    this.showPage(Math.floor(first / fit.perPage));
+    // Keep the piece in hand in view, or else the first piece that was showing.
+    const held = this.held && this.held !== 'group' ? this.pageOf(this.held) : null;
+    this.showPage(held ?? Math.floor(first / fit.perPage));
   }
 
   /** A finger swiped across the pieces turns the page. */

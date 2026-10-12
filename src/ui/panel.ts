@@ -208,9 +208,9 @@ const KEYS = [
 /** Fingers. */
 const TOUCH = [
   'Tap a palette piece: its ghost appears in the middle of the floor. Swipe across the palette, or use its arrows, for more pieces.',
-  'Move the ghost with the stick at the bottom right of the floor, and tap Place in its middle to put the piece down. Or tap a tile to move the ghost there, and tap the ghost to put it down.',
+  'Move the ghost with the stick at the bottom right, and tap Place in its middle to put the piece down. Or tap a tile to move the ghost there, and tap the ghost to put it down.',
   'Holding a belt, tap Lay to start a run: moving the ghost lays belts that turn to follow it. Tap Stop to end the run.',
-  'Turn is first in the tool bar while you hold something, then Put down, then Flip.',
+  'Turn is first in the tool bar while you hold something, then Put down (in red), then Flip, greyed out when it would change nothing.',
   'Drag one finger to look around. With nothing in hand, tap a tile to see what is on it, then Delete (a full refund), Cut or Copy it.',
   'Two fingers drag to look around, or pinch to zoom, at any time.',
   'Select, then drag a box: Delete, Cut and Copy work on all of it. Paste picks up what you last cut, copied or deleted.',
