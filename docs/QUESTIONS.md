@@ -953,3 +953,63 @@ from; it can be removed or moved; the lamplighter's line should then be short.
 `src/game/build.ts`, `src/game/shop.ts`, `src/game/tuning.ts`,
 `src/ui/tutorial.ts`, `src/ui/main.ts`, `src/ui/slots.ts`,
 `tests/game/startWell.test.ts`.
+
+**Q80. The keys to the shop: the lessons first, and two tours.** *Your
+request, on the tutorialization branch:* the first five hands-on basics
+puzzles are a precondition for owning the shop. A new save opens with a dialog
+in which the keys are handed over, once the basics are learned, and then the
+game starts as before. The tour splits in two: a simpler tour of the screen
+during the first puzzle, and a second when the puzzles are done and the shop
+opens, about regulars, the trunk, slots and so on. *Done as:*
+- *the lessons:* every hands-on rung of the basics ladder, in ladder order
+  (`lessons` in `src/game/keys.ts`): A bucket for the bench, Something
+  growing, First cup, Darker and On the ninth tick. It is not a tuning number:
+  a hands-on basics rung added later would be a lesson too. Rungs open in
+  order as ever, and no other ladder is open yet, so the lessons are all an
+  apprentice can reach;
+- *a new shop:* New shop on an empty slot saves the shop at once as an
+  apprentice's (`apprentice: true`, an optional save field; older saves have
+  none and are their owners') and opens its first lesson under the keys
+  dialog: the old keeper is hanging up the apron, the keys are to be yours,
+  but first five lessons at the workbench. Its buttons take the bench tour or
+  skip it. The shop itself is a new shop as before: 80 coins, the well, and
+  the lamplighter at the door;
+- *while the keys wait:* the slot reads "Lessons: 2 of 5 solved" with
+  Continue. Opening it, or `?slot=N`, goes to the next lesson, not the shop.
+  The puzzle card reads "Lesson 2 of 5 · then the keys", and its way out is
+  "Back to save slots". A lesson solved leads to the next, as any rung does.
+  The last one's card says the keys are yours, and both its buttons read
+  "Open the shop";
+- *the keys:* the shop's first opening after the last lesson hands them over
+  (`Shop.takeKeys`), and Happenings says "The keys are yours. The lamplighter
+  walks in: …". *Assumed:* the shop was not open before, so the lessons were
+  not time away: there is no morning report that first time;
+- *the bench tour, 6 steps:* the puzzle's card (lesson 1 of 5, Start over),
+  the order (filled 2 loops in a row, it is solved), the bench (bolted pieces,
+  the tray, the gap), your pieces (placing and turning, by mouse and keys or
+  by the stick; each piece on offer and any bolted to the bench; every piece
+  free), the clock (pause and step) and Help. Offered with the keys dialog.
+  "Take the tour" in any bench's Help tab takes it again, naming that bench's
+  pieces, and says nothing of keys once the shop is the player's;
+- *the shop tour, 7 steps:* offered as the keys are handed over ("The keys
+  are yours": Show me around, or Skip the tour), and as before to a save that
+  has not had it. The clock and placing moved to the bench tour. It covers the
+  newest regular, the feeder, slots, pieces at a price (the first four with
+  their keys, prices and rules, and ? for pieces still to come), coins and
+  rows, the rest of the workbench puzzles, and the first line from the well.
+  *Assumed:* "the trunk" is the feeder, which replaced the trunk row in
+  addendum 1;
+- *the tests:* `tests/ui/tutorial.test.ts` now checks both tours. The shop
+  tour's old checks on the clock and on placing by stick moved with those
+  steps to the bench tour; the rest stand for the shop tour as before.
+  `tests/game/keys.test.ts` checks the lessons, the keys and the save field;
+- *debug:* a debug shop's lesson card has "Skip the lessons (debug)", which
+  marks the five solved and opens the shop as if they were, so the keys and
+  the shop tour can be tried quickly;
+- *no storage, assumed:* the workbench keeps its progress in the slot's save,
+  so in a browser that keeps none (a private window, blocked storage) no
+  lesson could be kept. There a new shop opens straight away, as before.
+*Not done:* outside debug, no way to skip the lessons, for a player who has
+done them in another slot; a precondition, as asked. `src/game/keys.ts`,
+`src/game/shop.ts`, `src/game/save.ts`, `src/ui/tutorial.ts`,
+`src/ui/bench.ts`, `src/ui/main.ts`, `src/ui/slots.ts`, `src/ui/panel.ts`.

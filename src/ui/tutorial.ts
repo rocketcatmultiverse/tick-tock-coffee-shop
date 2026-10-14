@@ -1,25 +1,36 @@
-// The tour: a few short steps that point at the clock, the newest regular,
-// the first four pieces, the feeder, the slots, the till, the workbench
-// puzzles (docs/QUESTIONS.md, Q77) and the Help tab.
-// It is offered once per shop, can be skipped at any step, and can be taken
-// again from the Help tab. The floor keeps running and stays clickable
-// underneath. Every number in the words comes from the tuning files. On a
-// touch screen the words say tap rather than click and name no keys, and in a
-// narrow window they find the Help tab in the menu (docs/QUESTIONS.md, Q71).
+// The tours: a few short steps each, with a spotlight on one part of the page
+// and a card beside it. There are two (docs/QUESTIONS.md, Q80):
+//
+// - the bench tour, offered with the keys dialog on a new shop's first lesson
+//   at the workbench: the puzzle's card, its order, the bench, placing pieces,
+//   the clock and the Help tab. It can be taken again from the bench's Help tab;
+// - the shop tour, offered once per shop when it first opens (for a new shop,
+//   as the keys are handed over): the newest regular, the feeder, slots, the
+//   pieces at a price, coins, the rest of the workbench puzzles (Q77) and the
+//   Help tab. It can be taken again from the shop's Help tab.
+//
+// Either can be skipped at any step. The floor keeps running and stays
+// clickable underneath. Every number in the words comes from the tuning
+// files. On a touch screen the words say tap rather than click and name no
+// keys, and in a narrow window they find the tabs in the menu (Q71).
 
-import type { Roast } from '../sim/types';
-import { BREW_TIME, GROWTH, LOOP, WELL_TICK } from '../sim/tuning';
-import { ALL_PIECES, PIECE_LABEL, type PieceKind } from '../game/pieces';
+import type { PieceKind, PuzzleDef, Roast } from '../sim/types';
+import { BREW_TIME, GROWTH, LOOP, MILK_TICK, MIX_TIME, ROASTER_TICK, SPRING_TICKS, WELL_TICK } from '../sim/tuning';
+import { parseBoard } from '../game/bench';
+import { ALL_PIECES, PIECE_LABEL, pieceOf } from '../game/pieces';
 import { kettleTicks } from '../game/recipes';
-import { FLOOR_ROW_PRICE, HAPPY_LOOPS, START_COINS, START_PIECES, START_ROWS } from '../game/tuning';
+import { BENCH_SOLVE_LOOPS, FLOOR_ROW_PRICE, HAPPY_LOOPS, PIECE_PRICE, START_COINS, START_PIECES, START_ROWS } from '../game/tuning';
+import { PUZZLES } from '../levels/puzzles';
 import { spriteImg } from './art/dom';
 import { el } from './el';
 import { pieceKey } from './hotkeys';
 import { PIECE_ICON } from './palette';
-import { ROWS_WAIT, tickRange } from './tips';
+import { ROWS_WAIT, coins, tickRange } from './tips';
 
 const ticks = (n: number) => `${n} tick${n === 1 ? '' : 's'}`;
 const ROASTS: Roast[] = ['light', 'medium', 'dark'];
+const NUMBER_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+const inWords = (n: number) => NUMBER_WORDS[n] ?? String(n);
 
 /** The stool the slots step reads out: a timed regular's tick and the slot that serves it. */
 export interface StoolExample {
@@ -27,7 +38,8 @@ export interface StoolExample {
   slot: number;
 }
 
-export type TourStepId = 'clock' | 'regular' | 'pieces' | 'feeder' | 'slots' | 'coins' | 'bench' | 'go';
+export type ShopStepId = 'regular' | 'feeder' | 'slots' | 'pieces' | 'coins' | 'bench' | 'go';
+export type BenchStepId = 'lesson' | 'order' | 'floor' | 'pieces' | 'clock' | 'help';
 
 /** How the player plays: by touch or with a mouse and keys, and whether the tabs are in the menu. */
 export interface TourWords {
@@ -37,48 +49,130 @@ export interface TourWords {
   well?: boolean;
 }
 
-export interface TourText {
-  id: TourStepId;
+export interface BenchTourWords {
+  touch: boolean;
+  menu: boolean;
+  /** This bench is lesson `n` of the `of` before the keys (Q80). */
+  lesson?: { n: number; of: number };
+}
+
+export interface TourText<Id extends string = string> {
+  id: Id;
   title: string;
   lines: string[];
-  /** The pieces step: one line per piece, in the order a line runs. */
+  /** One line per piece, in the order a line runs. */
   pieces?: { piece: PieceKind; line: string }[];
 }
 
-/** What each piece of the first four does, in a sentence. */
-const PIECE_LINE: Partial<Record<PieceKind, string>> = {
+/** What each piece does, in a sentence. */
+const PIECE_LINE: Record<PieceKind, string> = {
   well: `on tick ${WELL_TICK} it puts out a bucket of water on each of its four sides.`,
   plot: `water landing on it grows beans, put out ${ticks(GROWTH)} later.`,
   kettle:
     `brews the beans that land on it into coffee, put out ${ticks(BREW_TIME)} later. ` +
     `The tick they land on sets the roast: ${ROASTS.map((r) => `${tickRange(kettleTicks(r))} ${r}`).join(', ')}.`,
   belt: 'carries an item one tile a tick. Drag to lay a run of them.',
+  spring: `a belt that takes ${ticks(SPRING_TICKS)} to cross instead of 1, holding what is on it in a queue.`,
+  chute: 'flings an item from its launch over the next tile onto its catch, two tiles on, a tick sooner than belts would.',
+  roaster: `holds one batch of beans and lets it out as espresso beans on tick ${ROASTER_TICK}. The less time inside, the lighter the roast.`,
+  door: `goes against the right-hand wall. The milkman drops a pail a tick onto the tile it faces, from tick ${MILK_TICK}.`,
+  mixer: `coffee and milk landing on one tick make a café au lait, espresso and milk a latte, put out ${ticks(MIX_TIME)} later.`,
+  splitter: 'hands each item to the next of its outputs in turn, clockwise from north. The round starts again on tick 0.',
 };
 
 /** The belt's line on a touch screen, where the stick lays a run. */
 const BELT_TOUCH = 'carries an item one tile a tick. Tap Lay on the stick and move it to lay a run of them; tap Stop to end it.';
 
-/** The first pieces in the order a line runs, from the well to the feeder. */
+const pieceLine = (piece: PieceKind, touch: boolean) => (touch && piece === 'belt' ? BELT_TOUCH : PIECE_LINE[piece]);
+const key = (p: PieceKind) => pieceKey(ALL_PIECES.indexOf(p));
+
+/** The first pieces in the order a line runs, from the well to the feeder; then the rest, in palette order. */
 const LINE_ORDER: PieceKind[] = ['well', 'plot', 'kettle', 'belt'];
+const TOUR_ORDER: PieceKind[] = [...LINE_ORDER, ...ALL_PIECES.filter((p) => !LINE_ORDER.includes(p))];
 
+/** How to put a piece down, on this device. */
+const PLACING = {
+  mouse: 'Click a piece, or press its number key, then click the floor. Press R to turn it first: a machine puts out on the side it faces. Hover a piece for all its rules.',
+  touch:
+    'Tap a piece: its ghost appears in the middle of the floor. Move it with the stick at the bottom right, and tap Place to put it down. ' +
+    'Turn it first with Turn, at the left of the tool bar: a machine puts out on the side it faces. Press and hold a piece for all its rules.',
+};
 
-/** The words of every step. Pure, so the tests can read them. */
-export function tourText(stool: StoolExample, words: TourWords = { touch: false, menu: false }): TourText[] {
-  const key = (p: PieceKind) => pieceKey(ALL_PIECES.indexOf(p));
-  const { touch, menu, well } = words;
-  const help = menu ? 'The Help tab, in the menu, has' : 'The Help tab has';
-  const bench = menu ? 'The Workbench tab, in the menu, has' : 'The Workbench tab has';
+const clockLines = (touch: boolean) => [
+  `The clock counts ${LOOP} ticks, 0 to ${LOOP - 1}, one a second, then goes round again. Everything on the floor happens on a tick.`,
+  touch
+    ? 'Pause stops it and Step moves it on one tick, so you can watch a line work. You can build while it runs or while it is paused.'
+    : 'Space pauses it and . steps one tick, so you can watch a line work. You can build while it runs or while it is paused.',
+];
+
+const helpLine = (touch: boolean, menu: boolean) =>
+  `${menu ? 'The Help tab, in the menu, has' : 'The Help tab has'} every ${touch ? 'control' : 'key'}, and this tour again. The Guide tab has every rule.`;
+
+/** The words of the bench tour on a puzzle's bench. Pure, so the tests can read them. */
+export function benchTourText(def: PuzzleDef, words: BenchTourWords = { touch: false, menu: false }): TourText<BenchStepId>[] {
+  const { touch, menu, lesson } = words;
+  const board = parseBoard(def.board);
+  const offered = new Set(ALL_PIECES.filter((p) => p in def.pieces));
+  const bolted = new Set(board.layout.tiles.flatMap((s) => (s && pieceOf(s.kind) ? [pieceOf(s.kind)!] : [])));
+  const shown = TOUR_ORDER.filter((p) => offered.has(p) || bolted.has(p));
   return [
     {
-      id: 'clock',
-      title: 'The clock',
+      id: 'lesson',
+      title: lesson ? `Lesson ${lesson.n} of ${lesson.of}` : 'The workbench',
       lines: [
-        `The shop runs on a clock of ${LOOP} ticks, 0 to ${LOOP - 1}, one a second, then round again. Everything on the floor happens on a tick.`,
-        touch
-          ? 'Pause stops it and Step moves it on one tick, so you can watch a line work. You can build while it runs or while it is paused.'
-          : 'Space pauses it and . steps one tick, so you can watch a line work. You can build while it runs or while it is paused.',
+        'Each puzzle at the workbench is a small floor of its own, with a tray to fill. This card says what to do.',
+        lesson ? `Solve all ${lesson.of} lessons and the keys to the shop are yours.` : 'Nothing on the bench touches your shop.',
+        'Start over clears the bench of items and starts the clock again from tick 0. Your pieces stay.',
       ],
     },
+    {
+      id: 'order',
+      title: 'The order',
+      lines: [
+        `The tray wants this every loop. ${touch ? 'Tap' : 'Hover'} the underlined name to see how it is made.`,
+        `Fill the order ${BENCH_SOLVE_LOOPS} loops in a row and the puzzle is solved. Under it is what the tray has had this loop, and how the last loop went.`,
+      ],
+    },
+    {
+      id: 'floor',
+      title: 'The bench',
+      lines: [
+        'Pieces with brass bolts came with the bench and stay put. The tray takes one item a tick, from any side.',
+        board.holes.size > 0
+          ? 'The gap is not bench: anything carried onto it spills, as it does off the edge.'
+          : 'Anything carried off the edge of the bench spills.',
+      ],
+    },
+    {
+      id: 'pieces',
+      title: 'Your pieces',
+      lines: [
+        touch ? PLACING.touch : PLACING.mouse,
+        touch
+          ? 'Tap a piece on the bench, then Delete, to take it up. Every piece here is free; where there is a limit, the palette says how many are left.'
+          : 'Z takes up the piece under the cursor. Every piece here is free; where there is a limit, the palette says how many are left.',
+      ],
+      pieces: shown.map((piece) => ({
+        piece,
+        line: offered.has(piece)
+          ? `${PIECE_LABEL[piece]}${touch ? '' : `, key ${key(piece)}`}: ${pieceLine(piece, touch)}`
+          : `${PIECE_LABEL[piece]}, on the bench: ${pieceLine(piece, touch)}`,
+      })),
+    },
+    { id: 'clock', title: 'The clock', lines: clockLines(touch) },
+    {
+      id: 'help',
+      title: 'Your turn',
+      lines: ['The puzzle’s card says what to do. Build, watch a loop or two, and change what needs changing.', helpLine(touch, menu)],
+    },
+  ];
+}
+
+/** The words of the shop tour. Pure, so the tests can read them. */
+export function shopTourText(stool: StoolExample, words: TourWords = { touch: false, menu: false }): TourText<ShopStepId>[] {
+  const { touch, menu, well } = words;
+  const bench = menu ? 'The Workbench tab, in the menu, has' : 'The Workbench tab has';
+  return [
     {
       id: 'regular',
       title: 'Your regulars',
@@ -86,19 +180,6 @@ export function tourText(stool: StoolExample, words: TourWords = { touch: false,
         `This card shows the newest regular: what they drink, and the tick they want it on. ${touch ? 'Tap' : 'Hover'} the underlined drink to see how it is made.`,
         `A regular served ${HAPPY_LOOPS} loops in a row is happy. Once everyone is happy, the next regular walks in.`,
       ],
-    },
-    {
-      id: 'pieces',
-      title: 'Your first four pieces',
-      lines: [
-        touch
-          ? 'Tap a piece: its ghost appears in the middle of the floor. Move it with the stick at the bottom right, and tap Place to put it down. Turn it first with Turn, at the left of the tool bar: a machine puts out on the side it faces. Press and hold a piece for all its rules.'
-          : 'Click a piece, or press its number key, then click the floor. Press R to turn it first: a machine puts out on the side it faces. Hover a piece for all its rules.',
-      ],
-      pieces: LINE_ORDER.filter((p) => START_PIECES.includes(p)).map((piece) => ({
-        piece,
-        line: `${PIECE_LABEL[piece]}${touch ? '' : `, key ${key(piece)}`}: ${touch && piece === 'belt' ? BELT_TOUCH : PIECE_LINE[piece]}`,
-      })),
     },
     {
       id: 'feeder',
@@ -118,10 +199,24 @@ export function tourText(stool: StoolExample, words: TourWords = { touch: false,
       ],
     },
     {
+      id: 'pieces',
+      title: 'Pieces cost coins',
+      lines: [
+        `The pieces from the workbench work here just as they did there, but each has a price. ${
+          touch ? 'Tap a piece, steer its ghost with the stick and tap Place.' : 'Click a piece, or press its number key, then click the floor.'
+        }`,
+        'A ? is a piece still to come: a regular brings it.',
+      ],
+      pieces: LINE_ORDER.filter((p) => START_PIECES.includes(p)).map((piece) => ({
+        piece,
+        line: `${PIECE_LABEL[piece]}${touch ? '' : `, key ${key(piece)}`}, ${coins(PIECE_PRICE[piece])}: ${pieceLine(piece, touch)}`,
+      })),
+    },
+    {
       id: 'coins',
       title: 'Coins',
       lines: [
-        `A new shop has ${START_COINS} coins. Pieces cost coins, and regulars pay for their cups.`,
+        `A new shop has ${START_COINS} coins, and regulars pay for their cups.`,
         `Deleting a piece gives back every coin it cost: ${touch ? 'tap it, then Delete' : 'hover it and press Z'}. So try things, and move them about freely.`,
         `Floor rows cost ${FLOOR_ROW_PRICE} and are not given back; buy one from the row for sale at the top of the floor. They are for sale once ${ROWS_WAIT}; the ${START_ROWS} rows you start with are plenty until then.`,
       ],
@@ -130,8 +225,7 @@ export function tourText(stool: StoolExample, words: TourWords = { touch: false,
       id: 'bench',
       title: 'The workbench',
       lines: [
-        `${bench} puzzles on a bench of their own: get the right things into the tray, loop after loop. Building there costs nothing.`,
-        'The basics are there from the start, and each new piece a regular brings opens a ladder of puzzles for it, from hands-on to mastery.',
+        `${bench} the rest of the basics, a brain teaser and a mastery puzzle, and each new piece a regular brings opens a ladder of puzzles for it, from hands-on to mastery.`,
         'Your regulars carry on while you are at the bench, and the shop greets you with the morning report when you come back.',
       ],
     },
@@ -142,10 +236,58 @@ export function tourText(stool: StoolExample, words: TourWords = { touch: false,
         well
           ? 'A well is already on the floor. Build a line from it: a plot, then a kettle, then into the feeder, with belts where you need them. Move the well if you like. Time it so the cup rides in the slot your regular wants.'
           : 'Build a line: a well, a plot and a kettle, then into the feeder, with belts where you need them. Time it so the cup rides in the slot your regular wants.',
-        touch ? `${help} every control, and this tour again. The Guide tab has every rule.` : `${help} every key, and this tour again. The Guide tab has every rule.`,
+        helpLine(touch, menu),
       ],
     },
   ];
+}
+
+/** Steps in each tour, for the offers. */
+export const SHOP_TOUR_STEPS = shopTourText({ tick: 0, slot: 0 }).length;
+export const BENCH_TOUR_STEPS = benchTourText(PUZZLES[0]).length;
+
+/** What an offer of a tour says. */
+export interface OfferText {
+  title: string;
+  lines: string[];
+  /** The aside under it: where to take the tour again. */
+  note: string;
+}
+
+const again = (menu: boolean) => `You can take it again any time from the Help tab${menu ? ', in the menu' : ''}.`;
+
+/** The dialog on a new shop's first lesson: the keys wait for the lessons (Q80). It offers the bench tour. */
+export function keysText(lessons: number, menu = false): OfferText {
+  return {
+    title: 'The keys to the shop',
+    lines: [
+      `The old keeper of the coffee shop is hanging up the apron, and the keys are to be yours: a little alchemical shop whose back room runs on a clock of ${LOOP} ticks.`,
+      `First, the basics: ${inWords(lessons)} lessons at the workbench out the back, each a small puzzle. Solve them all and the keys are yours, with your first regular at the door.`,
+      `A short tour shows you round the workbench in ${BENCH_TOUR_STEPS} quick steps. The clock keeps running while you read.`,
+    ],
+    note: again(menu),
+  };
+}
+
+/** The offer of the shop tour: as the keys are handed over, or as a welcome to a save that has not had it. */
+export function offerText(kind: 'keys' | 'welcome', newcomer: string, menu: boolean): OfferText {
+  if (kind === 'keys') {
+    return {
+      title: 'The keys are yours',
+      lines: [
+        `That was the last lesson, and the shop is yours. ${newcomer} is at the door.`,
+        `A short tour shows what the shop has that the bench had not, in ${SHOP_TOUR_STEPS} quick steps: regulars, the feeder, slots and coins. The floor keeps running while you read.`,
+      ],
+      note: again(menu),
+    };
+  }
+  return {
+    title: 'Welcome to the shop',
+    lines: [
+      `New here? A short tour shows how the shop works in ${SHOP_TOUR_STEPS} quick steps: regulars, the feeder, slots, coins and the workbench puzzles. The floor keeps running while you read.`,
+    ],
+    note: again(menu),
+  };
 }
 
 /** A box on the page, in CSS pixels from the window's top left. */
@@ -158,9 +300,24 @@ export interface Box {
 
 type Side = 'left' | 'right' | 'above' | 'below';
 
-/** What the tour points at, read again on every frame so it follows the page. */
-export interface TourTargets {
-  clock: HTMLElement;
+/** One step of a tour: its words, what it lights (read again on every frame, so it follows the page), and where the card goes. */
+export interface TourStep<Id extends string = string> {
+  text: TourText<Id>;
+  target(): Box | null;
+  /** Where the card goes, if it fits there. */
+  side: Side;
+}
+
+export const boxOf = (...els: HTMLElement[]): Box | null => {
+  const rects = els.map((e) => e.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
+  if (rects.length === 0) return null;
+  const left = Math.min(...rects.map((r) => r.left));
+  const top = Math.min(...rects.map((r) => r.top));
+  return { left, top, width: Math.max(...rects.map((r) => r.right)) - left, height: Math.max(...rects.map((r) => r.bottom)) - top };
+};
+
+/** What the shop tour points at. */
+export interface ShopTourTargets {
   newcomer: HTMLElement;
   /** The palette buttons of the first pieces. */
   pieces(): HTMLElement[];
@@ -172,37 +329,46 @@ export interface TourTargets {
   bench(): HTMLElement;
   /** The feeder column, or the counter with its stools, on the floor canvas. */
   floor(part: 'feeder' | 'counter'): Box | null;
-  /** Get the page ready for a step, such as opening the menu that holds its target; null when the tour ends. */
-  prepare(step: TourStepId | null): void;
 }
 
-interface TourStep {
-  text: TourText;
-  target(): Box | null;
-  /** Where the card goes, if it fits there. */
-  side: Side;
-}
-
-const boxOf = (...els: HTMLElement[]): Box | null => {
-  const rects = els.map((e) => e.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
-  if (rects.length === 0) return null;
-  const left = Math.min(...rects.map((r) => r.left));
-  const top = Math.min(...rects.map((r) => r.top));
-  return { left, top, width: Math.max(...rects.map((r) => r.right)) - left, height: Math.max(...rects.map((r) => r.bottom)) - top };
-};
-
-function steps(t: TourTargets, stool: StoolExample, words: TourWords): TourStep[] {
-  const at: Record<TourStepId, Omit<TourStep, 'text'>> = {
-    clock: { target: () => boxOf(t.clock), side: 'left' },
+export function shopTour(t: ShopTourTargets, stool: StoolExample, words: TourWords): TourStep<ShopStepId>[] {
+  const at: Record<ShopStepId, Omit<TourStep, 'text'>> = {
     regular: { target: () => boxOf(t.newcomer), side: 'left' },
-    pieces: { target: () => boxOf(...t.pieces()), side: 'above' },
     feeder: { target: () => t.floor('feeder'), side: 'right' },
     slots: { target: () => t.floor('counter'), side: 'above' },
+    pieces: { target: () => boxOf(...t.pieces()), side: 'above' },
     coins: { target: () => boxOf(t.till()), side: 'above' },
     bench: { target: () => boxOf(t.bench()), side: 'left' },
     go: { target: () => boxOf(t.help()), side: 'left' },
   };
-  return tourText(stool, words).map((text) => ({ text, ...at[text.id] }));
+  return shopTourText(stool, words).map((text) => ({ text, ...at[text.id] }));
+}
+
+/** What the bench tour points at. */
+export interface BenchTourTargets {
+  /** The puzzle's card: its name, its brief and the ways out. */
+  card: HTMLElement;
+  /** The tray's order. */
+  order: HTMLElement;
+  /** The bench on the floor canvas. */
+  floor(): Box | null;
+  /** The palette buttons of the pieces on offer. */
+  pieces(): HTMLElement[];
+  clock: HTMLElement;
+  /** Where the Help tab is: its button, or the menu that opens it. */
+  help(): HTMLElement;
+}
+
+export function benchTour(t: BenchTourTargets, def: PuzzleDef, words: BenchTourWords): TourStep<BenchStepId>[] {
+  const at: Record<BenchStepId, Omit<TourStep, 'text'>> = {
+    lesson: { target: () => boxOf(t.card), side: 'left' },
+    order: { target: () => boxOf(t.order), side: 'left' },
+    floor: { target: () => t.floor(), side: 'right' },
+    pieces: { target: () => boxOf(...t.pieces()), side: 'above' },
+    clock: { target: () => boxOf(t.clock), side: 'left' },
+    help: { target: () => boxOf(t.help()), side: 'left' },
+  };
+  return benchTourText(def, words).map((text) => ({ text, ...at[text.id] }));
 }
 
 /** Space between the spotlight and what it lights, between it and the card, and from the window's edges. */
@@ -231,23 +397,21 @@ export function placeCard(r: Box | null, side: Side, w: number, h: number, vw: n
   return clamp(pick.x, pick.y);
 }
 
-export class Tour {
+export class Tour<Id extends string = string> {
   private spot = el('div', { className: 'tour-spot' });
   private card = el('div', { className: 'tour-card' });
-  private steps: TourStep[];
   private k = 0;
   private frame = 0;
   private onKey = (e: KeyboardEvent) => {
     if (e.key === 'Escape') this.end();
   };
 
+  /** `prepare` gets the page ready for a step, such as opening the menu that holds its target; null when the tour ends. */
   constructor(
-    private readonly targets: TourTargets,
-    stool: StoolExample,
-    words: TourWords,
+    private readonly steps: TourStep<Id>[],
+    private readonly prepare: (step: Id | null) => void,
     private readonly onEnd: () => void = () => {},
   ) {
-    this.steps = steps(targets, stool, words);
     this.card.setAttribute('role', 'dialog');
     this.card.setAttribute('aria-label', 'Tour');
   }
@@ -268,14 +432,14 @@ export class Tour {
     window.removeEventListener('keydown', this.onKey);
     this.spot.remove();
     this.card.remove();
-    this.targets.prepare(null);
+    this.prepare(null);
     this.onEnd();
   }
 
   private show(k: number): void {
     this.k = k;
     const { text } = this.steps[k];
-    this.targets.prepare(text.id);
+    this.prepare(text.id);
     const last = k === this.steps.length - 1;
     const back = el('button', { textContent: 'Back', hidden: k === 0 });
     const next = el('button', { className: 'primary', textContent: last ? 'Start playing' : 'Next' });
@@ -320,20 +484,16 @@ export class Tour {
   }
 }
 
-/** Offered once per shop: take the tour now, or skip it. Either way it is not offered again. */
-export function offerTour(stepCount: number, choose: { take(): void; skip(): void }, menu = false): void {
-  const take = el('button', { className: 'primary', textContent: 'Show me around' });
+/** Offer a tour: take it now, or skip it. Either way the caller decides whether it is offered again. */
+export function offerTour(words: OfferText, choose: { take(): void; skip(): void }, takeLabel = 'Show me around'): void {
+  const take = el('button', { className: 'primary', textContent: takeLabel });
   const skip = el('button', { textContent: 'Skip the tour' });
   const card = el(
     'div',
     { className: 'report' },
-    el('h2', {}, 'Welcome to the shop'),
-    el(
-      'p',
-      {},
-      `New here? A short tour shows how the shop works in ${stepCount} quick steps: the clock, slots, your first four pieces and the workbench puzzles. The floor keeps running while you read.`,
-    ),
-    el('p', { className: 'muted' }, `You can take it again any time from the Help tab${menu ? ', in the menu' : ''}.`),
+    el('h2', {}, words.title),
+    ...words.lines.map((line) => el('p', {}, line)),
+    el('p', { className: 'muted' }, words.note),
     el('div', { className: 'row' }, skip, take),
   );
   const overlay = el('div', { className: 'overlay' }, card);
@@ -346,6 +506,3 @@ export function offerTour(stepCount: number, choose: { take(): void; skip(): voi
   document.body.append(overlay);
   take.focus();
 }
-
-/** Steps in the tour, for the offer. */
-export const TOUR_STEPS = tourText({ tick: 0, slot: 0 }).length;

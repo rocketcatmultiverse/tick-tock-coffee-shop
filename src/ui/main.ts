@@ -29,10 +29,10 @@ import type { StoolView, View } from './render';
 import { readRoute, routeUrl } from './route';
 import { ShareCard, VisitBanner, leaveVisit, showSpoilerWarning } from './share';
 import { downloadSave, showSlotScreen } from './slots';
-import { AUTOSAVE_MS, SLOTS, migrateLegacySave, openSlot, writeSave } from './storage';
+import { AUTOSAVE_MS, SLOTS, canSave, migrateLegacySave, openSlot, writeSave } from './storage';
 import { ROWS_WAIT } from './tips';
 import { Toast } from './toast';
-import { type Box, type StoolExample, type TourStepId, TOUR_STEPS, Tour, offerTour } from './tutorial';
+import { type Box, type ShopStepId, type StoolExample, Tour, offerText, offerTour, shopTour } from './tutorial';
 
 /** How long after a first click on the row for sale a second one buys it. */
 const ROW_ASK_MS = 4000;
@@ -86,7 +86,7 @@ class App extends FloorApp<Shop> {
   /** The save slot this shop is kept in; null while visiting someone else's. */
   private readonly slot: number | null;
   private leaving = false;
-  private tour: Tour | null = null;
+  private tour: Tour<ShopStepId> | null = null;
   /** Says when a regular walks in, at the top of the floor. */
   private toast: Toast;
 
@@ -103,11 +103,16 @@ class App extends FloorApp<Shop> {
     super(shop, { cols: COLS, counter: true }, touchFirst() ? REFUND_HINT.touch : REFUND_HINT.mouse);
     this.debug = debug;
     this.slot = slot;
+    // A new shop opens for the first time once its lessons are solved, and the keys are handed over (Q80).
+    const keys = loaded !== null && this.shop.takeKeys(PUZZLES);
+    const newest = this.shop.defs[this.shop.regulars.length - 1];
     if (visit) this.notes.push(`Visiting ${shopTitle(visit.shopName)}: the floor starts empty and fills within a loop or two. Nothing here is saved.`);
+    else if (keys) this.notes.push(`The keys are yours. ${newest.name} walks in: "${newest.intro}"`);
     else this.notes.push(loaded ? 'Welcome back. The floor starts empty and fills again within a loop or two.' : `${REGULARS[0].name} walks in: "${REGULARS[0].intro}"`);
     if (loaded) this.fixOldSave();
     if (notice) this.notes.unshift(notice);
-    const report = loaded ? applyOffline(this.shop, loaded.lastSeen, Date.now()) : null;
+    // The shop was not open before its keys were handed over, so the lessons were not time away.
+    const report = loaded && !keys ? applyOffline(this.shop, loaded.lastSeen, Date.now()) : null;
     const catHint = el('p', { className: 'muted' }, `${this.touch ? 'Tap' : 'Click'} your cat on the floor to name it or pet it.`);
     let shopPane: Node[];
     let benchPane: Node[];
@@ -162,7 +167,7 @@ class App extends FloorApp<Shop> {
       });
     }
     // A shop of the player's own that has not had the tour offered gets it, after any morning report.
-    const offer = !visit && !this.shop.tutorialSeen ? () => this.offerTour() : () => {};
+    const offer = !visit && !this.shop.tutorialSeen ? () => this.offerTour(keys) : () => {};
     if (report) {
       // The clock waits while the morning report is read.
       this.running = false;
@@ -229,18 +234,16 @@ class App extends FloorApp<Shop> {
     if (this.slot !== null) this.leave(id);
   }
 
-  private offerTour(): void {
-    offerTour(
-      TOUR_STEPS,
-      {
-        take: () => {
-          this.tourSeen();
-          this.startTour();
-        },
-        skip: () => this.tourSeen(),
+  /** Offer the shop tour: as the keys are handed over, or as a welcome to a save that has not had it. */
+  private offerTour(keys: boolean): void {
+    const newest = this.shop.defs[this.shop.regulars.length - 1];
+    offerTour(offerText(keys ? 'keys' : 'welcome', newest.name, this.shell.compact), {
+      take: () => {
+        this.tourSeen();
+        this.startTour();
       },
-      this.shell.compact,
-    );
+      skip: () => this.tourSeen(),
+    });
   }
 
   private tourSeen(): void {
@@ -250,28 +253,26 @@ class App extends FloorApp<Shop> {
 
   startTour(): void {
     this.tour?.end();
-    this.tour = new Tour(
+    const steps = shopTour(
       {
-        clock: this.panel.clock,
         newcomer: this.regularsPanel.next,
         pieces: () => this.palette.pieceButtons(START_PIECES),
         till: () => (this.shell.compact ? this.panel.coins : this.panel.tillCard),
         help: () => (this.shell.compact ? this.shell.menu : this.tabs.button('help')),
         bench: () => (this.shell.compact ? this.shell.menu : this.tabs.button('bench')),
         floor: (part) => this.floorBox(part),
-        prepare: (step) => this.prepareTour(step),
       },
       this.stoolExample(),
       { touch: this.touch, menu: this.shell.compact, well: this.shop.layout.tiles.some((s) => s?.kind === 'well') },
-      () => {
-        this.tour = null;
-      },
     );
+    this.tour = new Tour(steps, (step) => this.prepareTour(step), () => {
+      this.tour = null;
+    });
     this.tour.start();
   }
 
   /** In a narrow window the newest regular is in the drawer: open it for that step, and close it for the rest. */
-  private prepareTour(step: TourStepId | null): void {
+  private prepareTour(step: ShopStepId | null): void {
     if (step === 'regular') this.shell.openDrawer();
     else this.shell.closeDrawer();
     // The feeder is the left-hand column: bring it into view.
@@ -548,6 +549,9 @@ function ownProgress(debug: boolean): Progress {
  * of spoilers first. A slot in the query opens that slot's shop, or one of
  * its workbench puzzles (Q77). Anything else shows the save slots, to open
  * one of the player's own shops or start a new one.
+ *
+ * A shop whose keys wait for its lessons opens at its next lesson instead,
+ * and a new shop starts at its first, with the keys dialog (Q80).
  */
 function open(root: HTMLElement): void {
   const route = readRoute(location.search);
@@ -563,17 +567,37 @@ function open(root: HTMLElement): void {
     // Dev builds only: lets the console inspect the shop.
     if (import.meta.env.DEV) (window as unknown as { ticktock: App }).ticktock = app;
   };
-  const slots = (notice = '') => showSlotScreen({ defs: REGULARS, debug, notice, open: (slot) => start({ slot }) });
-  if (!fragment && route.slot !== null && SLOTS.includes(route.slot)) {
-    if (route.bench) {
-      const why = openBench(root, debug, route.slot, route.bench);
-      if (why === null) return;
-      history.replaceState(null, '', routeUrl(location.pathname, { debug, slot: null, bench: null }));
-      return slots(why);
+  /** A workbench puzzle in a slot's shop; if it cannot be opened, the save slots say why. */
+  const bench = (slot: number, id: string, welcome = false) => {
+    const why = openBench(root, debug, slot, id, welcome);
+    if (why === null) return;
+    history.replaceState(null, '', routeUrl(location.pathname, { debug, slot: null, bench: null }));
+    slots(why);
+  };
+  /** A lesson before the keys, at its own address, so a reload stays there. */
+  const lesson = (slot: number, id: string, welcome: boolean) => {
+    history.replaceState(null, '', routeUrl(location.pathname, { debug, slot, bench: id }));
+    bench(slot, id, welcome);
+  };
+  /** A slot's shop, or its next lesson while the keys wait for it. An empty slot starts a new shop at its first lesson. */
+  const enter = (slot: number) => {
+    const loaded = openSlot(REGULARS, debug, slot);
+    // Without storage no lesson could be kept, so a new shop opens straight away, as before the lessons.
+    if (!loaded && canSave()) {
+      const shop = new Shop({ defs: REGULARS, debug, apprentice: true });
+      writeSave(shop, slot);
+      return lesson(slot, shop.lessonDue(PUZZLES)!.id, true);
     }
+    const due = loaded?.shop.lessonDue(PUZZLES);
+    if (due) return lesson(slot, due.id, false);
+    start({ slot });
+  };
+  const slots = (notice = '') => showSlotScreen({ defs: REGULARS, puzzles: PUZZLES, debug, notice, open: enter });
+  if (!fragment && route.slot !== null && SLOTS.includes(route.slot)) {
+    if (route.bench) return bench(route.slot, route.bench);
     // Straight into the shop, as on coming back from the workbench. A reload from here shows the slots, as ever.
     history.replaceState(null, '', routeUrl(location.pathname, { debug, slot: null, bench: null }));
-    return start({ slot: route.slot });
+    return enter(route.slot);
   }
   if (!shared) {
     if (!fragment) return slots();

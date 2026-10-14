@@ -17,6 +17,7 @@ export interface Save {
   catName: string; // chosen by the player
   shopName?: string; // chosen by the player, for share links; older saves have none
   tutorialSeen?: boolean; // the tour was offered; older saves have none, so it is offered to them
+  apprentice?: boolean; // the keys wait for the lessons (Q80); older saves have none, and are their owners'
   bench?: BenchProgress; // workbench puzzles solved and the pieces on each bench; older saves have none
   gears: number; // paid by the clockmaker; buys nothing
   regulars: RegularState[];
@@ -31,6 +32,7 @@ export function saveShop(shop: Shop, now: number): Save {
     catName: shop.catName,
     shopName: shop.shopName,
     tutorialSeen: shop.tutorialSeen,
+    apprentice: shop.apprentice,
     bench: structuredClone(shop.bench),
     gears: shop.gears,
     regulars: shop.regulars.map((r) => ({ ...r })),
@@ -129,6 +131,7 @@ function isSave(data: unknown, defs: readonly RegularDef[]): data is Save {
   if (!isCount(d.gears) || typeof d.catName !== 'string' || typeof d.lastSeen !== 'number') return false;
   if (d.shopName !== undefined && typeof d.shopName !== 'string') return false;
   if (d.tutorialSeen !== undefined && typeof d.tutorialSeen !== 'boolean') return false;
+  if (d.apprentice !== undefined && typeof d.apprentice !== 'boolean') return false;
   if (d.bench !== undefined && !isBenchProgress(d.bench)) return false;
   const regs = d.regulars;
   if (!Array.isArray(regs) || regs.length > defs.length || (defs.length > 0 && regs.length === 0)) return false;

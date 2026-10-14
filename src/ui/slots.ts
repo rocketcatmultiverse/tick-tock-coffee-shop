@@ -2,7 +2,8 @@
 // replace with an imported file or delete; an empty one starts a new shop.
 // An exported save is the save itself, as a JSON file.
 
-import type { RegularDef } from '../sim/types';
+import type { PuzzleDef, RegularDef } from '../sim/types';
+import { lessons } from '../game/keys';
 import { type Save, exportText, importText } from '../game/save';
 import { shopTitle } from '../game/share';
 import { START_COINS } from '../game/tuning';
@@ -52,6 +53,8 @@ function ago(then: number, now: number): string {
 
 export interface SlotScreenOptions {
   defs: readonly RegularDef[];
+  /** The workbench puzzles, for the lessons before a new shop's keys (docs/QUESTIONS.md, Q80). */
+  puzzles: readonly PuzzleDef[];
   debug: boolean;
   /** Shown above the slots, such as a share link that could not be opened. */
   notice?: string;
@@ -61,6 +64,7 @@ export interface SlotScreenOptions {
 
 export function showSlotScreen(opts: SlotScreenOptions): void {
   const { defs, debug } = opts;
+  const before = lessons(opts.puzzles);
   const slots = el('div', { className: 'slots' });
   const status = el('div', { className: 'slot-status', role: 'status' });
   const file = el('input', { type: 'file', accept: '.json,application/json', hidden: true });
@@ -138,7 +142,11 @@ export function showSlotScreen(opts: SlotScreenOptions): void {
       const main = button('New shop', () => open(slot));
       root.append(
         el('div', { className: 'card-name' }, 'Empty'),
-        el('div', { className: 'muted slot-text' }, `A new shop: ${START_COINS} coins, a well on the floor and its first regular at the door.`),
+        el(
+          'div',
+          { className: 'muted slot-text' },
+          `A new shop: ${before.length} lessons at the workbench first, then the keys, ${START_COINS} coins, a well on the floor and a first regular at the door.`,
+        ),
         main,
         el('div', { className: 'row slot-actions' }, importBtn),
       );
@@ -163,7 +171,17 @@ export function showSlotScreen(opts: SlotScreenOptions): void {
     top.append(el('span', {}, ago(save.lastSeen, now)));
     const coins = `${save.till.toLocaleString()} coin${save.till === 1 ? '' : 's'}`;
     const gears = save.gears ? ` · ${save.gears.toLocaleString()} gear${save.gears === 1 ? '' : 's'}` : '';
-    const main = button('Open', () => open(slot));
+    // A shop whose keys wait for its lessons has not opened yet: it says how far the lessons have got.
+    const solved = before.filter((p) => save.bench?.solved.includes(p.id)).length;
+    const lines = save.apprentice
+      ? [`Lessons: ${solved} of ${before.length} solved`, solved < before.length ? 'The keys come after the last one.' : 'The keys are waiting.']
+      : [
+          `${save.regulars.length} of ${defs.length} regulars in`,
+          ...(newest ? [`Newest: ${newest.name.toLowerCase()}`] : []),
+          coins + gears,
+          ...(save.catName ? [`Cat: ${save.catName}`] : []),
+        ];
+    const main = button(save.apprentice ? 'Continue' : 'Open', () => open(slot));
     root.append(
       el(
         'div',
@@ -173,10 +191,7 @@ export function showSlotScreen(opts: SlotScreenOptions): void {
           'div',
           { className: 'slot-text' },
           el('div', { className: 'card-name' }, title),
-          el('div', { className: 'muted' }, `${save.regulars.length} of ${defs.length} regulars in`),
-          newest ? el('div', { className: 'muted' }, `Newest: ${newest.name.toLowerCase()}`) : '',
-          el('div', { className: 'muted' }, coins + gears),
-          save.catName ? el('div', { className: 'muted' }, `Cat: ${save.catName}`) : '',
+          ...lines.map((line) => el('div', { className: 'muted' }, line)),
         ),
       ),
       main,

@@ -231,27 +231,28 @@ export function benchLines(lines: readonly string[]): string[] {
 }
 
 /**
- * The tour, the controls for this device first, and credits for the fonts. At
- * the workbench (no tour to take) a note on the bench comes first instead, and
- * the controls leave out the shop's rows and refunds.
+ * The tour, the controls for this device first, and credits for the fonts.
+ * At the workbench the tour is the bench's own (docs/QUESTIONS.md, Q80), a
+ * note on the bench comes after it, and the controls leave out the shop's rows
+ * and refunds.
  */
-export function helpPane(startTour: (() => void) | null, touch: boolean): HTMLElement[] {
+export function helpPane(startTour: () => void, touch: boolean, bench = false): HTMLElement[] {
   const list = (lines: string[]) => el('ul', { className: 'keys' }, ...lines.map((t) => el('li', {}, t)));
-  const keys = startTour ? KEYS : benchLines(KEYS);
-  const fingers = startTour ? TOUCH : benchLines(TOUCH);
+  const keys = bench ? benchLines(KEYS) : KEYS;
+  const fingers = bench ? benchLines(TOUCH) : TOUCH;
   const [first, firstName, other, otherName] = touch ? [fingers, 'Touch', keys, 'Mouse and keys'] : [keys, 'Mouse and keys', fingers, 'Touch'];
-  let lead: HTMLElement;
-  if (startTour) {
-    const tour = el('button', { className: 'primary', textContent: 'Take the tour' });
-    tour.onclick = startTour;
-    lead = el('div', { className: 'help-tour' }, tour, el('span', { className: 'muted' }, 'A few short steps: the clock, slots, your first four pieces and the workbench.'));
-  } else lead = list(BENCH);
+  const tour = el('button', { className: 'primary', textContent: 'Take the tour' });
+  tour.onclick = startTour;
+  const steps = bench
+    ? 'A few short steps: the puzzle, its order, the bench, your pieces and the clock.'
+    : 'A few short steps: regulars, the feeder, slots, coins and the workbench.';
+  const lead = [el('div', { className: 'help-tour' }, tour, el('span', { className: 'muted' }, steps)), ...(bench ? [list(BENCH)] : [])];
   return [
-    lead,
+    ...lead,
     el('h3', { className: 'help-head' }, firstName),
     list(first),
     // The stools and slots are the shop's; the Guide tab reads the bench's own marks.
-    ...(startTour ? [list(MARKS)] : []),
+    ...(bench ? [] : [list(MARKS)]),
     el('details', {}, el('summary', {}, otherName), list(other)),
     el(
       'p',

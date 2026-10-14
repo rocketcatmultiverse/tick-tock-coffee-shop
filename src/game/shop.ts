@@ -3,10 +3,11 @@
 // on the floor are in src/sim/; this layer only reads the simulator's events.
 
 import { adaptState, emptyState, itemName, step, visitLength, visitOffset } from '../sim';
-import type { Drink, Item, Layout, RegularDef, Seat, SimEvent, SimState } from '../sim/types';
+import type { Drink, Item, Layout, PuzzleDef, RegularDef, Seat, SimEvent, SimState } from '../sim/types';
 import { COLS, LOOP, MILK_TICK } from '../sim/tuning';
 import { type BuildPlan, type BuildRights, type TileChange, brokenChute, floorValue, newShopLayout, planBuild, rightsAfter, startLayout, tileValue } from './build';
 import { type BenchProgress, type Ladder, laddersOpen, noBenchProgress } from './bench';
+import { nextLesson } from './keys';
 import { ALL_PIECES, PIECE_LABEL, type PieceKind, isFixed } from './pieces';
 import { type RegularState, isMilkDrinker, seatFor } from './regulars';
 import {
@@ -29,6 +30,8 @@ export interface ShopOptions {
   debug?: boolean;
   /** Opened from someone's share link: it plays, and it is never saved. */
   visiting?: boolean;
+  /** A new shop whose keys wait for its lessons at the workbench (docs/QUESTIONS.md, Q80). */
+  apprentice?: boolean;
 }
 
 /** Rows taken back from a save that bought them too early, and what was refunded. */
@@ -89,6 +92,11 @@ export class Shop {
   shopName = '';
   /** The tour has been offered, and taken or skipped. Older saves have not had it offered. */
   tutorialSeen = false;
+  /**
+   * The keys wait for the lessons at the workbench, and the shop has not
+   * opened yet (Q80). Older saves were their owners' already.
+   */
+  apprentice = false;
   /** Workbench puzzles solved, and the pieces left on each bench (docs/QUESTIONS.md, Q77). */
   bench: BenchProgress = noBenchProgress();
   /** Regulars who have walked in, in order. The last one may still be new. */
@@ -111,6 +119,7 @@ export class Shop {
     this.defs = opts.defs;
     this.debug = !!opts.debug;
     this.visiting = !!opts.visiting;
+    this.apprentice = !!opts.apprentice;
     // The first regular walks in with the shop, and the first well is down for their line (Q79).
     this.layout = this.defs.length > 0 ? newShopLayout() : startLayout(START_ROWS);
     this.till = this.debug ? DEBUG_COINS : START_COINS;
@@ -126,6 +135,7 @@ export class Shop {
     catName: string;
     shopName?: string;
     tutorialSeen?: boolean;
+    apprentice?: boolean;
     bench?: BenchProgress;
     regulars: RegularState[];
   }): void {
@@ -135,6 +145,7 @@ export class Shop {
     this.catName = saved.catName;
     this.shopName = saved.shopName ?? '';
     this.tutorialSeen = saved.tutorialSeen ?? false;
+    this.apprentice = saved.apprentice ?? false;
     this.bench = structuredClone(saved.bench ?? noBenchProgress());
     this.regulars = saved.regulars.map((r) => ({ ...r }));
     this.visitServed = this.regulars.map(() => false);
@@ -180,6 +191,18 @@ export class Shop {
   beenHappy(): number {
     const n = this.regulars.length;
     return n === 0 ? 0 : n - 1 + (this.isHappy(n - 1) ? 1 : 0);
+  }
+
+  /** The lesson to take next before the keys, or null once the shop is the player's or every lesson is solved. */
+  lessonDue(puzzles: readonly PuzzleDef[]): PuzzleDef | null {
+    return this.apprentice ? nextLesson(puzzles, this.bench.solved) : null;
+  }
+
+  /** Hand the keys over, once every lesson is solved. Returns whether this did, so the shop opens for the first time. */
+  takeKeys(puzzles: readonly PuzzleDef[]): boolean {
+    if (!this.apprentice || this.lessonDue(puzzles)) return false;
+    this.apprentice = false;
+    return true;
   }
 
   /** Why no floor row is for sale yet, or null if one is. Debug shops may always buy. */
