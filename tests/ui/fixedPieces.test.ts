@@ -5,7 +5,8 @@
 import { describe, expect, it } from 'vitest';
 import { Shop } from '../../src/game/shop';
 import { planBuild, rightsAfter, tileValue } from '../../src/game/build';
-import { BOWL_COL, BOWL_ROW, FLOOR_ROW_PRICE, START_COINS, START_ROWS } from '../../src/game/tuning';
+import { BOWL_COL, BOWL_ROW, FLOOR_ROW_PRICE, START_COINS, START_ROWS, START_WELL_COL, START_WELL_ROW } from '../../src/game/tuning';
+import { REGULARS } from '../../src/levels/regulars';
 import { tileIndex } from '../../src/sim/grid';
 import { Editor } from '../../src/ui/editor';
 
@@ -25,6 +26,16 @@ describe('Fixed pieces', () => {
     expect(shop.layout.tiles[tileIndex(3, 9)]).toEqual({ kind: 'bowl' });
     const others = shop.layout.tiles.filter((s, i) => s && i % 12 !== 0 && i !== tileIndex(3, 9));
     expect(others).toEqual([]);
+    expect(shop.till).toBe(START_COINS);
+  });
+
+  it('the well a shop opens with is not fixed: X takes it up and a click puts it down elsewhere (Q79)', () => {
+    const shop = new Shop({ defs: REGULARS });
+    const ed = new Editor(shop);
+    ed.cut('hover', START_WELL_ROW, START_WELL_COL);
+    expect(shop.layout.tiles[tileIndex(START_WELL_ROW, START_WELL_COL)]).toBeNull();
+    ed.press(2, 6);
+    expect(shop.layout.tiles[tileIndex(2, 6)]).toEqual({ kind: 'well' });
     expect(shop.till).toBe(START_COINS);
   });
 

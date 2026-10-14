@@ -128,7 +128,10 @@ describe('Shop', () => {
 
   it('refuses a piece the till cannot cover', () => {
     const shop = new Shop({ defs: REGULARS });
-    shop.build([{ index: tileIndex(2, 2), to: { kind: 'well' } }]); // 55 left
+    shop.build([
+      { index: tileIndex(2, 2), to: { kind: 'kettle', out: 'S' } },
+      { index: tileIndex(2, 4), to: { kind: 'plot', out: 'S' } },
+    ]); // 55 left
     for (const col of [3, 4, 5]) expect(shop.build([{ index: tileIndex(3, col), to: { kind: 'kettle', out: 'S' } }]).ok).toBe(true);
     expect(shop.till).toBe(10);
     const plan = shop.build([{ index: tileIndex(3, 6), to: { kind: 'kettle', out: 'S' } }]);

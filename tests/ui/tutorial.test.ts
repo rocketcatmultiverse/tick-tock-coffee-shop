@@ -56,6 +56,14 @@ describe('The tour', () => {
     expect(touch.find((s) => s.id === 'pieces')!.pieces!.map((p) => p.piece)).toEqual(['well', 'plot', 'kettle', 'belt']);
   });
 
+  it('builds the first line from the well already on the floor, or asks for one when there is none (Q79)', () => {
+    const go = (well: boolean) => all(tourText(STOOL, { touch: false, menu: false, well }).find((s) => s.id === 'go')!).join(' ');
+    expect(go(true)).toMatch(/A well is already on the floor\. Build a line from it: a plot, then a kettle/);
+    expect(go(true)).toMatch(/Move the well if you like/);
+    expect(go(false)).toMatch(/Build a line: a well, a plot and a kettle/);
+    expect(go(false)).not.toMatch(/already on the floor/);
+  });
+
   it('finds the Help tab in the menu when the tabs are in the drawer', () => {
     const go = (words: { touch: boolean; menu: boolean }) => all(tourText(STOOL, words).find((s) => s.id === 'go')!).join(' ');
     expect(go({ touch: false, menu: false })).toContain('The Help tab has every key');

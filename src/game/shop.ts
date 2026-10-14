@@ -5,7 +5,7 @@
 import { adaptState, emptyState, itemName, step, visitLength, visitOffset } from '../sim';
 import type { Drink, Item, Layout, RegularDef, Seat, SimEvent, SimState } from '../sim/types';
 import { COLS, LOOP, MILK_TICK } from '../sim/tuning';
-import { type BuildPlan, type BuildRights, type TileChange, brokenChute, floorValue, planBuild, rightsAfter, startLayout, tileValue } from './build';
+import { type BuildPlan, type BuildRights, type TileChange, brokenChute, floorValue, newShopLayout, planBuild, rightsAfter, startLayout, tileValue } from './build';
 import { type BenchProgress, type Ladder, laddersOpen, noBenchProgress } from './bench';
 import { ALL_PIECES, PIECE_LABEL, type PieceKind, isFixed } from './pieces';
 import { type RegularState, isMilkDrinker, seatFor } from './regulars';
@@ -111,7 +111,8 @@ export class Shop {
     this.defs = opts.defs;
     this.debug = !!opts.debug;
     this.visiting = !!opts.visiting;
-    this.layout = startLayout(START_ROWS);
+    // The first regular walks in with the shop, and the first well is down for their line (Q79).
+    this.layout = this.defs.length > 0 ? newShopLayout() : startLayout(START_ROWS);
     this.till = this.debug ? DEBUG_COINS : START_COINS;
     this.sim = emptyState(this.layout, 0);
     if (this.defs.length > 0) this.walkIn();

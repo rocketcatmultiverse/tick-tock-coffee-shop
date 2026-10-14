@@ -138,7 +138,7 @@ export function showSlotScreen(opts: SlotScreenOptions): void {
       const main = button('New shop', () => open(slot));
       root.append(
         el('div', { className: 'card-name' }, 'Empty'),
-        el('div', { className: 'muted slot-text' }, `A new shop: ${START_COINS} coins, a bare floor and its first regular at the door.`),
+        el('div', { className: 'muted slot-text' }, `A new shop: ${START_COINS} coins, a well on the floor and its first regular at the door.`),
         main,
         el('div', { className: 'row slot-actions' }, importBtn),
       );

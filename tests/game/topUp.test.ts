@@ -5,13 +5,15 @@
 import { describe, expect, it } from 'vitest';
 import { loadShop, saveShop } from '../../src/game/save';
 import { Shop } from '../../src/game/shop';
-import { PIECE_PRICE, START_COINS, START_ROWS } from '../../src/game/tuning';
+import { PIECE_PRICE, START_COINS, START_ROWS, START_WELL_COL, START_WELL_ROW } from '../../src/game/tuning';
 import { REGULARS } from '../../src/levels/regulars';
 import { tileIndex } from '../../src/sim/grid';
 import type { Structure } from '../../src/sim/types';
 
 function opened(till: number, pieces: [number, number, Structure][] = [], rows = START_ROWS, walkedIn = 1): Shop {
   const built = new Shop({ defs: REGULARS, debug: true });
+  // The pieces given are the whole floor: take up the well a new shop opens with (Q79).
+  built.build([{ index: tileIndex(START_WELL_ROW, START_WELL_COL), to: null }]);
   while (built.layout.rows < rows) built.buyRow();
   built.build(pieces.map(([row, col, to]) => ({ index: tileIndex(row, col), to })));
   const save = saveShop(built, 0);

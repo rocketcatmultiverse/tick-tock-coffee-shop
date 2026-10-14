@@ -33,6 +33,8 @@ export type TourStepId = 'clock' | 'regular' | 'pieces' | 'feeder' | 'slots' | '
 export interface TourWords {
   touch: boolean;
   menu: boolean;
+  /** A well is on the floor already, as a new shop has (docs/QUESTIONS.md, Q79). */
+  well?: boolean;
 }
 
 export interface TourText {
@@ -63,7 +65,7 @@ const LINE_ORDER: PieceKind[] = ['well', 'plot', 'kettle', 'belt'];
 /** The words of every step. Pure, so the tests can read them. */
 export function tourText(stool: StoolExample, words: TourWords = { touch: false, menu: false }): TourText[] {
   const key = (p: PieceKind) => pieceKey(ALL_PIECES.indexOf(p));
-  const { touch, menu } = words;
+  const { touch, menu, well } = words;
   const help = menu ? 'The Help tab, in the menu, has' : 'The Help tab has';
   const bench = menu ? 'The Workbench tab, in the menu, has' : 'The Workbench tab has';
   return [
@@ -137,7 +139,9 @@ export function tourText(stool: StoolExample, words: TourWords = { touch: false,
       id: 'go',
       title: 'Your turn',
       lines: [
-        'Build a line: a well, a plot and a kettle, then into the feeder, with belts where you need them. Time it so the cup rides in the slot your regular wants.',
+        well
+          ? 'A well is already on the floor. Build a line from it: a plot, then a kettle, then into the feeder, with belts where you need them. Move the well if you like. Time it so the cup rides in the slot your regular wants.'
+          : 'Build a line: a well, a plot and a kettle, then into the feeder, with belts where you need them. Time it so the cup rides in the slot your regular wants.',
         touch ? `${help} every control, and this tour again. The Guide tab has every rule.` : `${help} every key, and this tour again. The Guide tab has every rule.`,
       ],
     },

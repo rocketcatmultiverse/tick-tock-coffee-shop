@@ -262,7 +262,7 @@ class App extends FloorApp<Shop> {
         prepare: (step) => this.prepareTour(step),
       },
       this.stoolExample(),
-      { touch: this.touch, menu: this.shell.compact },
+      { touch: this.touch, menu: this.shell.compact, well: this.shop.layout.tiles.some((s) => s?.kind === 'well') },
       () => {
         this.tour = null;
       },

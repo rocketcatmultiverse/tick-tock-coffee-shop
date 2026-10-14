@@ -919,3 +919,38 @@ solver scripts may be committed. *Done as:*
 - *no solver script:* the puzzles were checked by running candidate solutions
   through the simulator, which is what the test does.
 `tests/levels/puzzles.test.ts`, `src/ui/tutorial.ts`, `.gitignore`.
+
+**Q79. A new shop opens with its first well down.** *Your request:* pre-place
+the first well at column 3, row 1, so a new player has something to build
+from; it can be removed or moved; the lamplighter's line should then be short.
+*Done as:*
+- *the well:* `newShopLayout` in `src/game/build.ts` is the fresh back room
+  with a well at `START_WELL_ROW`, `START_WELL_COL` (1, 3). That is where every
+  line for places 1 to 4 in the addendum's layout has its well, and where the
+  lamplighter's reference line has it, so no fixture changed. It is an ordinary
+  well, not fixed: it can be cut and put down, moved in one edit, or deleted. It
+  is the one well a new shop may own, so a second is refused until the
+  postwoman. Its four buckets spill each loop until something is built beside
+  it, as any lone well's do;
+- *the lamplighter's line:* from it, a plot under the well, a kettle and one
+  belt into feeder row 0 (26 coins), or a plot west of it and a kettle straight
+  into feeder row 1 (25 coins), each serves the lamplighter Just in Time from
+  the first loop. The same line one row up misses by two slots (the addendum's
+  "a detour moves a cup by 2 slots");
+- *assumed, coins:* Spec 4 says a new shop begins with 80 coins in the till,
+  so the well is a gift on top: the till still reads `START_COINS`, and
+  deleting the well refunds its 25 like any well's, leaving 105. The other
+  reading, the well bought out of the 80 (55 in the till), is a one-line
+  change in `Shop`'s constructor. Top-up on load still tops a poor shop up to
+  `START_COINS`;
+- *only new shops:* a save, a share link or a workbench puzzle opens with the
+  floor it has. An older save is not given a well. A shop with no regulars
+  (only the tests make one) keeps the bare back room, since the well is for the
+  first regular's line;
+- *the tour:* when a well is on the floor, its last step reads "A well is
+  already on the floor. Build a line from it: a plot, then a kettle, then into
+  the feeder…". With none, as on an older save, it still asks for a well. An
+  empty save slot reads "80 coins, a well on the floor", not "a bare floor".
+`src/game/build.ts`, `src/game/shop.ts`, `src/game/tuning.ts`,
+`src/ui/tutorial.ts`, `src/ui/main.ts`, `src/ui/slots.ts`,
+`tests/game/startWell.test.ts`.

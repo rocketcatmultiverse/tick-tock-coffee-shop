@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import type { TileChange } from '../../src/game/build';
 import { loadShop, saveShop } from '../../src/game/save';
 import { Shop } from '../../src/game/shop';
-import { FLOOR_ROW_PRICE, PIECE_PRICE, START_COINS, START_ROWS } from '../../src/game/tuning';
+import { FLOOR_ROW_PRICE, PIECE_PRICE, START_COINS, START_ROWS, START_WELL_COL, START_WELL_ROW } from '../../src/game/tuning';
 import { REFERENCE_LAYOUTS } from '../../src/levels/layouts';
 import { REGULARS } from '../../src/levels/regulars';
 import { tileIndex } from '../../src/sim/grid';
@@ -22,6 +22,8 @@ function lineFor(id: string): TileChange[] {
 /** A shop as an older version may have saved it, opened as a player's own. */
 function oldSave(opts: { rows: number; till: number; walkedIn: number; pieces?: [number, number, Structure][] }): Shop {
   const built = new Shop({ defs: REGULARS, debug: true });
+  // Older versions opened on a bare floor, with no well already down (Q79).
+  built.build([{ index: tileIndex(START_WELL_ROW, START_WELL_COL), to: null }]);
   while (built.layout.rows < opts.rows) built.buyRow();
   const plan = built.build((opts.pieces ?? []).map(([row, col, to]) => ({ index: tileIndex(row, col), to })));
   expect(plan.ok ? 'ok' : plan.reason).toBe('ok');

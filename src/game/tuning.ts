@@ -71,6 +71,13 @@ export const GEARS_JUST_IN_TIME = 2;
 export const BOWL_ROW = 3;
 export const BOWL_COL = 9;
 
+/**
+ * A new shop's first well, already on the floor where the lamplighter's line
+ * wants it. It is an ordinary well, free to move or delete (docs/QUESTIONS.md, Q79).
+ */
+export const START_WELL_ROW = 1;
+export const START_WELL_COL = 3;
+
 /** Save slots on the title screen, each holding one shop. */
 export const SAVE_SLOTS = 3;
 

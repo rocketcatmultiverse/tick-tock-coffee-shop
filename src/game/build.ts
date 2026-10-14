@@ -7,13 +7,23 @@ import type { Layout, RegularDef, Structure } from '../sim/types';
 import { COLS } from '../sim/tuning';
 import { colOf, emptyLayout, stepFrom, tileIndex } from '../sim/grid';
 import { ALL_PIECES, PIECE_LABEL, type PieceKind, isFixed, pieceOf } from './pieces';
-import { BOWL_COL, BOWL_ROW, PIECE_PRICE, START_PIECES, START_WELL_LIMIT } from './tuning';
+import { BOWL_COL, BOWL_ROW, PIECE_PRICE, START_PIECES, START_ROWS, START_WELL_COL, START_WELL_LIMIT, START_WELL_ROW } from './tuning';
 
 /** A fresh back room: the feeder down column 0 of every row and the cat's bowl in place. */
 export function startLayout(rows: number): Layout {
   const layout = emptyLayout(rows);
   for (let r = 0; r < rows; r++) layout.tiles[tileIndex(r, 0)] = { kind: 'feeder' };
   layout.tiles[tileIndex(BOWL_ROW, BOWL_COL)] = { kind: 'bowl' };
+  return layout;
+}
+
+/**
+ * A new shop's floor: a fresh back room with the first well already down, so a
+ * new player has something to build from. It is not fixed (docs/QUESTIONS.md, Q79).
+ */
+export function newShopLayout(): Layout {
+  const layout = startLayout(START_ROWS);
+  layout.tiles[tileIndex(START_WELL_ROW, START_WELL_COL)] = { kind: 'well' };
   return layout;
 }
 
