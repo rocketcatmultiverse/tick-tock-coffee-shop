@@ -4,7 +4,8 @@ import { BENCH_SOLVE_LOOPS, PIECE_PRICE, START_COINS, START_PIECES } from '../..
 import { PUZZLES } from '../../src/levels/puzzles';
 import { REGULARS } from '../../src/levels/regulars';
 import { slotOf } from '../../src/sim/grid';
-import { BENCH_TOUR_STEPS, SHOP_TOUR_STEPS, type TourText, benchTourText, keysText, offerText, placeCard, shopTourText } from '../../src/ui/tutorial';
+import { keysLetter } from '../../src/ui/letter';
+import { BENCH_TOUR_STEPS, SHOP_TOUR_STEPS, type TourText, benchTourText, offerText, placeCard, shopTourText } from '../../src/ui/tutorial';
 
 const lamplighter = REGULARS[0].order.tick as number;
 const STOOL = { tick: lamplighter, slot: slotOf(lamplighter, REGULARS[0].col) };
@@ -173,17 +174,43 @@ describe('The shop tour, once the keys are handed over (Q80)', () => {
   });
 });
 
-describe('The keys, and the offers of a tour (Q80)', () => {
-  it('a new shop’s keys wait for its lessons, counted out', () => {
-    const k = keysText(5);
-    expect(k.title).toBe('The keys to the shop');
-    expect(k.lines.join(' ')).toMatch(/five lessons at the workbench/);
-    expect(k.lines.join(' ')).toMatch(/the keys are yours/);
+describe('Grandpa’s letter, and the offers of a tour (Q80, Q82)', () => {
+  const letter = keysLetter(5, REGULARS[0].name);
+  const words = [letter.greeting, ...letter.lines, ...letter.signoff, letter.ps].join(' ');
+
+  it('a new shop begins with a note from Grandpa to a grandchild, signed by him', () => {
+    expect(letter.greeting).toBe('My dear grandchild,');
+    expect(letter.signoff.at(-1)).toBe('Grandpa');
+    for (const line of [words, letter.tour]) expect(line).not.toMatch(/undefined|NaN|\$\{|null/);
   });
 
-  it('the shop offers its tour as the keys are handed over, or as a welcome to an older save', () => {
+  it('makes the lessons his test, counted out, with the shop for passing it', () => {
+    expect(words).toMatch(/five lessons on the workbench/);
+    expect(words).toMatch(/my test/);
+    expect(words).toMatch(/Pass all five, and the shop is yours/);
+    expect(keysLetter(3, REGULARS[0].name).lines.join(' ')).toMatch(/three lessons .* Pass all three/);
+  });
+
+  it('is disappointed in the cousins who failed it, and makes you the last hope', () => {
+    expect(words).toMatch(/Your cousins all had a go/);
+    expect(words).toMatch(/You’re my last hope/);
+  });
+
+  it('warns of the first regular in the postscript', () => {
+    expect(letter.ps).toMatch(/^P\.S\. The lamplighter comes in first thing/);
+    expect(letter.ps).toMatch(/Never keep the lamplighter waiting\.$/);
+  });
+
+  it('offers the bench tour under it, and finds the Help tab in the menu when the tabs are in the drawer', () => {
+    expect(letter.tour).toContain(`${BENCH_TOUR_STEPS} quick steps`);
+    expect(letter.tour).toContain('from the Help tab.');
+    expect(keysLetter(5, REGULARS[0].name, true).tour).toContain('from the Help tab, in the menu.');
+  });
+
+  it('the shop offers its tour as the keys are handed over, Grandpa’s test passed, or as a welcome to an older save', () => {
     const keys = offerText('keys', REGULARS[0].name, false);
     expect(keys.title).toBe('The keys are yours');
+    expect(keys.lines.join(' ')).toContain('You passed Grandpa’s test');
     expect(keys.lines.join(' ')).toContain('The lamplighter is at the door');
     expect(keys.lines.join(' ')).toContain(`${SHOP_TOUR_STEPS} quick steps`);
     const welcome = offerText('welcome', REGULARS[0].name, true);

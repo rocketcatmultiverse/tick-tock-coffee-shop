@@ -10,8 +10,8 @@
 // A new shop's keys wait for its lessons, the hands-on basics (Q80). While
 // they do, the bench is where the player is: each lesson leads on to the
 // next, the way out is to the save slots, and the last one hands over the
-// keys and opens the shop. The first lesson opens with the keys dialog and
-// the offer of the bench tour. A lesson solved is cheered on the bench, and
+// keys and opens the shop. The first lesson opens with Grandpa's letter and
+// the offer of the bench tour (Q82). A lesson solved is cheered on the bench, and
 // then the next opens by itself, or after the last, the shop (Q81).
 
 import { tileIndex } from '../sim';
@@ -46,7 +46,8 @@ import type { View } from './render';
 import { routeUrl } from './route';
 import { AUTOSAVE_MS, openSlot, writeBench } from './storage';
 import { orderTipKey } from './tips';
-import { type BenchStepId, type Box, Tour, benchTour, keysText, offerTour } from './tutorial';
+import { keysLetter, showLetter } from './letter';
+import { type BenchStepId, type Box, Tour, benchTour } from './tutorial';
 
 /** The line under the palette when nothing on the bench is hovered or tapped. */
 const TAKE_UP_HINT = {
@@ -57,8 +58,8 @@ const TAKE_UP_HINT = {
 /**
  * Open a workbench puzzle in a slot's shop. Returns null once it is open, or
  * why it could not be: no shop in the slot, no such puzzle, or one the shop
- * has not opened yet. `welcome` greets a new shop's first lesson with the
- * keys dialog (Q80).
+ * has not opened yet. `welcome` greets a new shop's first lesson with
+ * Grandpa's letter (Q80, Q82).
  */
 export function openBench(root: HTMLElement, debug: boolean, slot: number, id: string, welcome = false): string | null {
   const def = PUZZLES.find((p) => p.id === id);
@@ -187,9 +188,9 @@ class BenchApp extends FloorApp<Workbench> {
     this.leave(null);
   }
 
-  /** A new shop's first lesson: the keys wait for the lessons, and the bench tour is offered (Q80). */
+  /** A new shop's first lesson: Grandpa's letter, and the offer of the bench tour (Q80, Q82). */
   welcome(): void {
-    offerTour(keysText(this.lessons?.length ?? 0, this.shell.compact), { take: () => this.startTour(), skip: () => {} }, 'Show me the workbench');
+    showLetter(keysLetter(this.lessons?.length ?? 0, REGULARS[0].name, this.shell.compact), { take: () => this.startTour(), skip: () => {} });
   }
 
   startTour(): void {

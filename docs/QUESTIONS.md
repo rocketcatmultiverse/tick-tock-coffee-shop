@@ -1046,3 +1046,32 @@ everything else. *Done as:*
   solved comes back to the next lesson.
 `src/ui/celebrate.ts`, `src/ui/render.ts` (`drawCheer`), `src/ui/bench.ts`
 (`cheerLesson`), `src/game/keys.ts`.
+
+**Q82. Grandpa's letter.** *Your request:* make the very first message cuter:
+a handwritten note from Grandpa that makes the starter puzzles his test,
+disappointed in your cousins for failing it, with you as his last hope.
+*Done as:* the keys dialog of Q80 is now a note on cream notepaper, ruled one
+line of handwriting apart and taped down a little crooked over the first
+lesson, in Patrick Hand with the greeting and the signature in Caveat Brush,
+and a brass key doodled beside "Grandpa" in the sprites' hand-drawn style
+(`keyImg` in `src/ui/art/dom.ts`). It reads:
+"My dear grandchild, My knees can't keep up with the clock any more, so the
+shop needs a new keeper. But the keys don't go to just anyone. There are five
+lessons on the workbench out the back. Think of them as my test. Pass all
+five, and the shop is yours. Your cousins all had a go, bless them. Barnaby
+flooded the back room. Clementine brewed something that bit. And we don't
+talk about what Tobias did to the kettle. You're my last hope. Don't tell
+them I said so. With love, Grandpa. P.S. The lamplighter comes in first thing
+every morning. Never keep the lamplighter waiting."
+The number of lessons and the first regular come from the data. Under the
+paper, on a darker backdrop than other cards so it reads over the page, are
+the offer of the bench tour and its two buttons, as before. *Assumed:*
+- "grandchild", so the letter guesses no name or gender for the player; the
+  cousins' names are invented;
+- the dialog when the shop opens now begins "You passed Grandpa's test, and
+  the shop is yours", so the story closes where it started. Nothing else
+  mentions Grandpa;
+- on a screen too short for the letter, it scrolls, and opens at its top with
+  the tour button in focus, so Enter still takes the tour.
+`src/ui/letter.ts`, `src/ui/art/dom.ts`, `src/ui/style.css`,
+`src/ui/tutorial.ts`, `src/ui/bench.ts`.

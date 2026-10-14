@@ -1605,6 +1605,124 @@ details > summary {
   color: var(--muted);
 }
 
+/* ---- Grandpa's letter, over a new shop's first lesson (src/ui/letter.ts) ------------ */
+
+/* Darker than other cards' backdrop, so the words under the paper read over a busy page. */
+.overlay.letter-overlay {
+  background: rgba(20, 14, 22, 0.9);
+}
+
+.letter-wrap {
+  margin: auto;
+  width: min(460px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* Cream notepaper, ruled one line of handwriting apart, taped down a little crooked. */
+.letter {
+  --rule: 30px;
+  position: relative;
+  box-sizing: border-box;
+  margin-top: 14px;
+  padding: calc(var(--rule) * 1.5) 30px var(--rule);
+  color: #3a2b36;
+  font-size: 19px;
+  line-height: var(--rule);
+  background-color: #f6ecd6;
+  background-image: repeating-linear-gradient(to bottom, transparent 0 calc(var(--rule) - 1px), rgba(140, 104, 74, 0.22) calc(var(--rule) - 1px) var(--rule));
+  background-position: 0 calc(var(--rule) * 0.5 - 5px);
+  border-radius: 3px 4px 3px 5px;
+  box-shadow:
+    0 14px 34px rgba(0, 0, 0, 0.5),
+    0 1px 0 rgba(0, 0, 0, 0.25);
+  transform: rotate(-1.2deg);
+}
+
+/* A strip of gold tape over the top edge. */
+.letter::before {
+  content: '';
+  position: absolute;
+  top: -13px;
+  left: 50%;
+  width: 104px;
+  height: 28px;
+  margin-left: -52px;
+  background: rgba(230, 180, 80, 0.62);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  transform: rotate(3deg);
+}
+
+.letter p {
+  margin: 0;
+  text-indent: 1.4em;
+}
+
+.letter .letter-greeting {
+  text-indent: 0;
+  font-family: var(--brush);
+  font-size: 25px;
+}
+
+/* "With love," and a big signature, beside a doodled brass key. */
+.letter-sign {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+
+.letter-sign img {
+  transform: rotate(-8deg);
+}
+
+.letter-name {
+  font-family: var(--brush);
+  font-size: 40px;
+  line-height: calc(var(--rule) * 2);
+  transform: rotate(-3deg);
+}
+
+.letter .letter-ps {
+  text-indent: 0;
+  font-size: 17px;
+}
+
+.letter-after {
+  text-align: center;
+  color: var(--muted);
+}
+
+.letter-after p {
+  margin: 0 0 12px;
+}
+
+.letter-after .row {
+  justify-content: center;
+}
+
+@media (max-width: 480px) {
+  .letter {
+    --rule: 27px;
+    padding: calc(var(--rule) * 1.5) 20px var(--rule);
+    font-size: 17px;
+    transform: rotate(-0.6deg);
+  }
+
+  .letter .letter-greeting {
+    font-size: 22px;
+  }
+
+  .letter-name {
+    font-size: 34px;
+  }
+
+  .letter .letter-ps {
+    font-size: 15px;
+  }
+}
+
 /* ---- Tooltips ---------------------------------------------------------------------- */
 
 /* Words with a tooltip: a dotted underline. */

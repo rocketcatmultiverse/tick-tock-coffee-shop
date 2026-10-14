@@ -1,8 +1,8 @@
 // The tours: a few short steps each, with a spotlight on one part of the page
 // and a card beside it. There are two (docs/QUESTIONS.md, Q80):
 //
-// - the bench tour, offered with the keys dialog on a new shop's first lesson
-//   at the workbench: the puzzle's card, its order, the bench, placing pieces,
+// - the bench tour, offered under Grandpa's letter (letter.ts, Q82) on a new
+//   shop's first lesson at the workbench: the puzzle's card, its order, the bench, placing pieces,
 //   the clock and the Help tab. It can be taken again from the bench's Help tab;
 // - the shop tour, offered once per shop when it first opens (for a new shop,
 //   as the keys are handed over): the newest regular, the feeder, slots, the
@@ -29,8 +29,6 @@ import { ROWS_WAIT, coins, tickRange } from './tips';
 
 const ticks = (n: number) => `${n} tick${n === 1 ? '' : 's'}`;
 const ROASTS: Roast[] = ['light', 'medium', 'dark'];
-const NUMBER_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
-const inWords = (n: number) => NUMBER_WORDS[n] ?? String(n);
 
 /** The stool the slots step reads out: a timed regular's tick and the slot that serves it. */
 export interface StoolExample {
@@ -256,26 +254,13 @@ export interface OfferText {
 
 const again = (menu: boolean) => `You can take it again any time from the Help tab${menu ? ', in the menu' : ''}.`;
 
-/** The dialog on a new shop's first lesson: the keys wait for the lessons (Q80). It offers the bench tour. */
-export function keysText(lessons: number, menu = false): OfferText {
-  return {
-    title: 'The keys to the shop',
-    lines: [
-      `The old keeper of the coffee shop is hanging up the apron, and the keys are to be yours: a little alchemical shop whose back room runs on a clock of ${LOOP} ticks.`,
-      `First, the basics: ${inWords(lessons)} lessons at the workbench out the back, each a small puzzle. Solve them all and the keys are yours, with your first regular at the door.`,
-      `A short tour shows you round the workbench in ${BENCH_TOUR_STEPS} quick steps. The clock keeps running while you read.`,
-    ],
-    note: again(menu),
-  };
-}
-
 /** The offer of the shop tour: as the keys are handed over, or as a welcome to a save that has not had it. */
 export function offerText(kind: 'keys' | 'welcome', newcomer: string, menu: boolean): OfferText {
   if (kind === 'keys') {
     return {
       title: 'The keys are yours',
       lines: [
-        `That was the last lesson, and the shop is yours. ${newcomer} is at the door.`,
+        `You passed Grandpa’s test, and the shop is yours. ${newcomer} is at the door.`,
         `A short tour shows what the shop has that the bench had not, in ${SHOP_TOUR_STEPS} quick steps: regulars, the feeder, slots and coins. The floor keeps running while you read.`,
       ],
       note: again(menu),

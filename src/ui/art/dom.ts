@@ -29,6 +29,22 @@ export function spriteImg(key: string, size: number, className = 'sprite'): HTML
   return img;
 }
 
+/** The key to the shop, in brass, doodled by Grandpa's signature (docs/QUESTIONS.md, Q82). */
+const KEY_BODY =
+  '<g transform="rotate(-32 30 30)">' +
+  `<path d="M27 27h27v6H27z" fill="${PAL.gold}"/>` +
+  `<path d="M44 33h4v6h-4zM50 33h4v8h-4z" fill="${PAL.gold}"/>` +
+  `<path fill-rule="evenodd" fill="${PAL.gold}" d="M5 30a11 11 0 1 0 22 0a11 11 0 1 0-22 0zM12 30a4 4 0 1 0 8 0a4 4 0 1 0-8 0z"/>` +
+  '</g>';
+
+export function keyImg(size: number): HTMLImageElement {
+  const img = new Image(size, size);
+  img.className = 'sprite';
+  img.alt = '';
+  img.src = cached(`k:${size}`, () => svgUrl(svgDocument({ body: KEY_BODY, viewBox: 60, seed: 7 }, size * 2)));
+  return img;
+}
+
 /** An <img> of a regular's portrait. */
 export function portraitImg(id: string, size: number, className = 'portrait'): HTMLImageElement {
   const img = new Image(size, size);
