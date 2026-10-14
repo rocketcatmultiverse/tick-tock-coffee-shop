@@ -15,3 +15,17 @@ export function lessons(puzzles: readonly PuzzleDef[]): PuzzleDef[] {
 export function nextLesson(puzzles: readonly PuzzleDef[], solved: readonly string[]): PuzzleDef | null {
   return lessons(puzzles).find((p) => !solved.includes(p.id)) ?? null;
 }
+
+/** Where a lesson just solved leads straight on to (Q81). */
+export type AfterLesson = { to: 'lesson'; lesson: PuzzleDef } | { to: 'shop' };
+
+/**
+ * Once lesson `id` is solved (and in `solved`): on to the first lesson not
+ * yet solved, or into the shop, with its keys, after the last. Null for a
+ * puzzle that is not a lesson, which leads nowhere by itself.
+ */
+export function afterLesson(puzzles: readonly PuzzleDef[], id: string, solved: readonly string[]): AfterLesson | null {
+  if (!lessons(puzzles).some((p) => p.id === id)) return null;
+  const lesson = nextLesson(puzzles, solved);
+  return lesson ? { to: 'lesson', lesson } : { to: 'shop' };
+}

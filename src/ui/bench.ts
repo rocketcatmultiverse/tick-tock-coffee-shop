@@ -11,7 +11,8 @@
 // they do, the bench is where the player is: each lesson leads on to the
 // next, the way out is to the save slots, and the last one hands over the
 // keys and opens the shop. The first lesson opens with the keys dialog and
-// the offer of the bench tour.
+// the offer of the bench tour. A lesson solved is cheered on the bench, and
+// then the next opens by itself, or after the last, the shop (Q81).
 
 import { tileIndex } from '../sim';
 import type { PieceKind, PuzzleDef, SimEvent } from '../sim/types';
@@ -25,7 +26,7 @@ import {
   wantItem,
   wantName,
 } from '../game/bench';
-import { lessons, nextLesson } from '../game/keys';
+import { afterLesson, lessons, nextLesson } from '../game/keys';
 import { ALL_PIECES } from '../game/pieces';
 import { BENCH_SOLVE_LOOPS } from '../game/tuning';
 import { PUZZLES } from '../levels/puzzles';
@@ -34,6 +35,7 @@ import { spriteImg } from './art/dom';
 import { itemKey } from './art/svg';
 import { touchFirst } from './device';
 import { el } from './el';
+import { CHEER_MS } from './celebrate';
 import { FloorApp } from './floorApp';
 import { PAD } from './geometry';
 import { BENCH_MARKS } from './guide';
@@ -79,6 +81,8 @@ class BenchApp extends FloorApp<Workbench> {
   private readonly back = el('button', { className: 'primary' });
   private leaving = false;
   private tour: Tour<BenchStepId> | null = null;
+  /** A solved lesson being cheered on the bench (Q81). */
+  private cheer: NonNullable<View['bench']>['cheer'] = null;
 
   /** `lessons` are the lessons before the keys while the shop's keys wait for them (Q80), else null. */
   constructor(
@@ -253,14 +257,41 @@ class BenchApp extends FloorApp<Workbench> {
     if (report.solvedNow) {
       this.editor.message = `Solved! The tray had its order ${BENCH_SOLVE_LOOPS} loops in a row.`;
       this.save();
+      this.cheerLesson();
     }
     return report.events;
+  }
+
+  /**
+   * In the lessons before the keys only: cheer the solve on the bench, then go
+   * straight on to the next lesson, or into the shop after the last (Q81).
+   */
+  private cheerLesson(): void {
+    const after = this.lessons ? afterLesson(PUZZLES, this.def.id, this.progress.solved) : null;
+    if (!after || this.cheer) return;
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    const line = after.to === 'lesson' ? `Next: ${after.lesson.name}` : 'The keys are yours';
+    const cheer = { ms: 0, line, reduced };
+    this.cheer = cheer;
+    this.tour?.end();
+    const start = performance.now();
+    const frame = () => {
+      if (this.leaving) return;
+      cheer.ms = performance.now() - start;
+      this.render();
+      if (cheer.ms < CHEER_MS) requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+    // A timer moves on, not the last frame: frames stop where the page is not being drawn, and the lessons must not.
+    window.setTimeout(() => {
+      if (!this.leaving) this.leave(after.to === 'lesson' ? after.lesson.id : null);
+    }, CHEER_MS);
   }
 
   protected floorParts(): Pick<View, 'forSale' | 'stools' | 'cat' | 'bench'> {
     const took = new Map<number, boolean>();
     for (const e of this.bench.lastEvents) if (e.type === 'deliver') took.set(e.at, isWanted(this.def.wants, e.item));
-    return { forSale: null, stools: [], cat: null, bench: { holes: this.bench.holes, fixed: this.bench.fixed, took } };
+    return { forSale: null, stools: [], cat: null, bench: { holes: this.bench.holes, fixed: this.bench.fixed, took, tray: this.bench.tray, cheer: this.cheer } };
   }
 
   protected paletteModel(): PaletteModel {

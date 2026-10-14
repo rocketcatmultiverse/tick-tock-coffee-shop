@@ -1013,3 +1013,36 @@ opens, about regulars, the trunk, slots and so on. *Done as:*
 done them in another slot; a precondition, as asked. `src/game/keys.ts`,
 `src/game/shop.ts`, `src/game/save.ts`, `src/ui/tutorial.ts`,
 `src/ui/bench.ts`, `src/ui/main.ts`, `src/ui/slots.ts`, `src/ui/panel.ts`.
+
+**Q81. A cheer for each lesson solved, then straight on.** *Your request:*
+for the lessons before the keys only, a success animation on the map when the
+puzzle is solved, then straight on to the next puzzle. This is the one
+animation the game has; CLAUDE.md's "no animation polish" stands for
+everything else. *Done as:*
+- *the cheer, 2.2 seconds on the bench's canvas:* the bench's edge lights
+  gold; two gold rings spread from the tray and sixteen sparkles (gold, cream
+  and leaf green, outlined in ink like the sprites) burst from it and drift
+  down as they fade; a "Solved!" banner pops in over the middle of the bench,
+  a touch too big and then settling, with "Next: Something growing" (or after
+  the last lesson, "The keys are yours") under it; over the last third of a
+  second the night falls over the floor. The frames come from the time since
+  it began (`cheerFrame` in `src/ui/celebrate.ts`), so the tests read them
+  without a canvas (`tests/ui/celebrate.test.ts`); `render.ts` draws them;
+- *then straight on:* to the first lesson not yet solved, or into the shop
+  after the last, where the keys dialog greets the player (`afterLesson` in
+  `src/game/keys.ts`). The floor keeps running under the cheer, and the
+  order card's Next button and the puzzle card's way out still work, so a
+  click skips it;
+- *only the lessons:* only while the keys wait, and only on the tick a lesson
+  is first solved. A puzzle solved after the keys, the basics ones included,
+  says so as before and waits for its Next button;
+- *reduced motion:* with the system's reduced-motion setting nothing flies or
+  grows: the edge is lit and the banner is there at its own size from the
+  start, and the night still falls before the next lesson;
+- *assumed, moving on by the clock:* a timer opens the next lesson, not the
+  animation's last frame, since frames stop where the page is not being drawn
+  (a hidden tab, or the desktop app's browser pane behind another tab, which
+  still reports itself visible). A player who looks away as a lesson is
+  solved comes back to the next lesson.
+`src/ui/celebrate.ts`, `src/ui/render.ts` (`drawCheer`), `src/ui/bench.ts`
+(`cheerLesson`), `src/game/keys.ts`.

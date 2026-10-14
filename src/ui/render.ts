@@ -9,7 +9,8 @@
 // A workbench puzzle's bench (docs/QUESTIONS.md, Q77) is drawn the same way,
 // at its own width, without the counter, the stools or the row for sale. Its
 // holes are left dark, the pieces it came with are bolted down, and the tray
-// shows what it took on the tick just run.
+// shows what it took on the tick just run. A lesson solved before the keys is
+// cheered over it (Q81).
 
 import type { Dir, Item, Layout, Roast, SimEvent, SimState, Structure } from '../sim/types';
 import { canTake, clockTick, colOf, feederSlot, isCounter, rowOf, slotOf, splitterNext, splitterOutputs, stepFrom, tileIndex } from '../sim';
@@ -21,6 +22,7 @@ import { type Geometry, PAD, type Spot } from './geometry';
 import { PAL, type PlotStage, type TileLook, itemKey, splashKey, spriteBody, structureKey } from './art/svg';
 import { portraitBody } from './art/portraits';
 import type { SpriteBank } from './art/raster';
+import { cheerFrame } from './celebrate';
 
 /** One stool: its regular now, and what the counter strip says about them in steady state. */
 export interface StoolView {
@@ -55,6 +57,10 @@ export interface BenchView {
   fixed: ReadonlySet<number>;
   /** Per tray that took an item on the tick just run: whether the order wants it. */
   took: Map<number, boolean>;
+  /** The tray, where a cheer bursts from. */
+  tray: number;
+  /** A solved lesson's cheer (Q81): how far into it, and the line under "Solved!" saying what comes next. */
+  cheer: { ms: number; line: string; reduced: boolean } | null;
 }
 
 export interface View {
@@ -248,6 +254,99 @@ export function draw(ctx: CanvasRenderingContext2D, view: View): void {
 
   drawCameraHints(ctx, view);
   drawEditing(ctx, view, editor);
+  if (view.bench?.cheer) drawCheer(ctx, view, view.bench.tray, view.bench.cheer);
+}
+
+const CHEER_HUES = [PAL.gold, PAL.cream, PAL.leaf];
+
+/** A four-pointed sparkle of radius `r`. */
+function sparkle(ctx: CanvasRenderingContext2D, x: number, y: number, r: number): void {
+  ctx.beginPath();
+  for (let k = 0; k < 8; k++) {
+    const a = (k * Math.PI) / 4 - Math.PI / 2;
+    const d = k % 2 ? r * 0.38 : r;
+    ctx.lineTo(x + Math.cos(a) * d, y + Math.sin(a) * d);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+}
+
+/**
+ * A solved lesson's cheer, over everything (Q81): the bench's edge lit gold,
+ * rings and sparkles from the tray, the "Solved!" banner over the middle of
+ * the bench, and at the end the night falling over the floor.
+ */
+function drawCheer(ctx: CanvasRenderingContext2D, view: View, tray: number, cheer: NonNullable<BenchView['cheer']>): void {
+  const { geo } = view;
+  const T = geo.tile;
+  const f = cheerFrame(cheer.ms, cheer.reduced);
+  const rows = view.floor.layout.rows;
+  const top = Math.max(PAD, geo.counterY - rows * T + geo.camY);
+  const board = { x: geo.x0, y: top, w: geo.floorW, h: Math.min(geo.roomH, rows * T) };
+  const at = indexXY(view, tray);
+  const cx = at.x + T / 2;
+  const cy = at.y + T / 2;
+  ctx.save();
+  ctx.globalAlpha = f.glow;
+  ctx.strokeStyle = PAL.gold;
+  ctx.lineWidth = 5;
+  ctx.shadowColor = PAL.gold;
+  ctx.shadowBlur = 18;
+  ctx.beginPath();
+  ctx.roundRect(board.x, board.y, board.w, board.h, 14);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.lineWidth = 4;
+  for (const r of f.rings) {
+    if (r.alpha <= 0) continue;
+    ctx.globalAlpha = r.alpha;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r.r * T, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  // Outlined in ink like the sprites, so they show on the bench's pale floor too.
+  ctx.strokeStyle = PAL.ink;
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin = 'round';
+  for (const s of f.sparks) {
+    if (s.alpha <= 0) continue;
+    ctx.globalAlpha = s.alpha;
+    ctx.fillStyle = CHEER_HUES[s.hue];
+    sparkle(ctx, cx + s.dx * T, cy + s.dy * T, s.size * T);
+  }
+  if (f.banner.alpha > 0) {
+    const title = Math.max(28, Math.min(64, Math.round(board.w * 0.14)));
+    const sub = Math.max(14, Math.round(title * 0.4));
+    ctx.font = `${title}px 'Caveat Brush', cursive`;
+    const titleW = ctx.measureText('Solved!').width;
+    ctx.font = `${sub}px ${BODY_FONT}`;
+    const lineW = ctx.measureText(cheer.line).width;
+    const w = Math.max(titleW, lineW) + title;
+    const h = title * 1.15 + sub * 1.5 + title * 0.4;
+    const bx = Math.max(w / 2 + 4, Math.min(geo.width - w / 2 - 4, board.x + board.w / 2));
+    const by = Math.max(h / 2 + 4, Math.min(geo.height - h / 2 - 4, board.y + board.h / 2));
+    ctx.translate(bx, by);
+    ctx.scale(f.banner.scale, f.banner.scale);
+    ctx.globalAlpha = f.banner.alpha;
+    ctx.fillStyle = 'rgba(36, 28, 38, 0.92)';
+    ctx.strokeStyle = PAL.gold;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.roundRect(-w / 2, -h / 2, w, h, 16);
+    ctx.fill();
+    ctx.stroke();
+    text(ctx, 'Solved!', 0, -h / 2 + title * 0.2 + (title * 1.15) / 2, { size: title, color: PAL.gold, font: "'Caveat Brush', cursive" });
+    text(ctx, cheer.line, 0, h / 2 - title * 0.2 - (sub * 1.5) / 2, { size: sub, color: PAL.cream });
+  }
+  ctx.restore();
+  if (f.fade > 0) {
+    ctx.save();
+    ctx.globalAlpha = f.fade;
+    ctx.fillStyle = PAL.night;
+    ctx.fillRect(0, 0, geo.width, geo.height);
+    ctx.restore();
+  }
 }
 
 /** The counter: the feeder carries on along it as one fixed belt, slot numbers riding along; then the stools. */

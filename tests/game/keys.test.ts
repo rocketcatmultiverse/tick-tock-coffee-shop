@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { puzzleOpen } from '../../src/game/bench';
-import { lessons, nextLesson } from '../../src/game/keys';
+import { afterLesson, lessons, nextLesson } from '../../src/game/keys';
 import { loadShop, saveShop } from '../../src/game/save';
 import { Shop } from '../../src/game/shop';
 import { START_COINS } from '../../src/game/tuning';
@@ -33,6 +33,17 @@ describe('The lessons before the keys', () => {
     expect(nextLesson(PUZZLES, LESSONS)).toBeNull();
     // The brain teaser and the mastery rung come after the keys, from the shop's Workbench tab.
     expect(nextLesson(PUZZLES, [...LESSONS, 'basics-light'])).toBeNull();
+  });
+
+  it('each lead straight on to the next once solved, and the last into the shop (Q81)', () => {
+    expect(afterLesson(PUZZLES, 'basics-water', ['basics-water'])).toEqual({ to: 'lesson', lesson: PUZZLES[1] });
+    expect(afterLesson(PUZZLES, 'basics-dark', LESSONS.slice(0, 4))).toEqual({ to: 'lesson', lesson: PUZZLES[4] });
+    expect(afterLesson(PUZZLES, 'basics-nine', LESSONS)).toEqual({ to: 'shop' });
+    // On to the first lesson not yet solved, should any be left behind.
+    expect(afterLesson(PUZZLES, 'basics-cup', ['basics-water', 'basics-cup'])).toEqual({ to: 'lesson', lesson: PUZZLES[1] });
+    // Any other puzzle leads nowhere by itself: its Next button is the way on.
+    expect(afterLesson(PUZZLES, 'basics-light', [...LESSONS, 'basics-light'])).toBeNull();
+    expect(afterLesson(PUZZLES, 'spring-wind', [...LESSONS, 'spring-wind'])).toBeNull();
   });
 
   it('are each open in a new shop once the one before is solved', () => {
