@@ -937,11 +937,10 @@ from; it can be removed or moved; the lamplighter's line should then be short.
   into feeder row 1 (25 coins), each serves the lamplighter Just in Time from
   the first loop. The same line one row up misses by two slots (the addendum's
   "a detour moves a cup by 2 slots");
-- *assumed, coins:* Spec 4 says a new shop begins with 80 coins in the till,
-  so the well is a gift on top: the till still reads `START_COINS`, and
-  deleting the well refunds its 25 like any well's, leaving 105. The other
-  reading, the well bought out of the 80 (55 in the till), is a one-line
-  change in `Shop`'s constructor. Top-up on load still tops a poor shop up to
+- *coins, your decision:* the well is a gift on top of Spec 4's 80 coins:
+  the till still reads `START_COINS`, and deleting the well refunds its 25
+  like any well's, leaving 105. Not bought out of the 80 (which would have
+  left 55 in the till). Top-up on load still tops a poor shop up to
   `START_COINS`;
 - *only new shops:* a save, a share link or a workbench puzzle opens with the
   floor it has. An older save is not given a well. A shop with no regulars
