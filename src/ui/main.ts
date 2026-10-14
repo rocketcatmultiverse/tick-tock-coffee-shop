@@ -1,42 +1,39 @@
 import './style.css';
-import { clockTick, counterIndex, feederSlot, isPresent, itemName, slotOf, splitterNext, splitterOutputs, structureToken, tileIndex } from '../sim';
+import { counterIndex, feederSlot, isPresent, itemName, slotOf, tileIndex } from '../sim';
 import { COLS, MILK_TICK } from '../sim/tuning';
-import type { Dir, Layout, RegularDef, Roast } from '../sim/types';
-import { ALL_PIECES, pieceOf } from '../game/pieces';
+import type { Layout, RegularDef, SimEvent } from '../sim/types';
+import { ALL_PIECES } from '../game/pieces';
 import { applyOffline } from '../game/offline';
 import { saveShop } from '../game/save';
 import { type Progress, type ShopStats, decodeShare, isBehind, progressOf, shopStats, shopTitle, visitShop } from '../game/share';
 import { type RowRefund, Shop } from '../game/shop';
 import { type StripCell, counterStrip } from '../game/strip';
-import { BOWL_COL, BOWL_ROW, FLOOR_ROW_PRICE, HAPPY_LOOPS, PIECE_PRICE, START_COINS, START_PIECES, START_ROWS } from '../game/tuning';
+import { BOWL_COL, BOWL_ROW, FLOOR_ROW_PRICE, HAPPY_LOOPS, START_COINS, START_PIECES, START_ROWS } from '../game/tuning';
+import { PUZZLES } from '../levels/puzzles';
 import { REGULARS } from '../levels/regulars';
+import { openBench } from './bench';
+import { BenchList } from './benchList';
 import { catSpot } from './cat';
 import { CatCard } from './catCard';
 import { RegularsPanel } from './regularsPanel';
-import { SpriteBank } from './art/raster';
 import { touchFirst } from './device';
-import { Editor } from './editor';
-import { Geometry, MIN_TILE, MIN_TOUCH_TILE, PAD, type Spot } from './geometry';
-import { Guide } from './guide';
-import { bindInput } from './input';
-import { Joystick, stepSpot } from './joystick';
+import { FloorApp } from './floorApp';
+import { PAD, type Spot } from './geometry';
+import { drinksOrdered } from './guide';
 import { el } from './el';
 import { Shell } from './layout';
-import { Palette } from './palette';
-import { Panel, Tabs, helpPane } from './panel';
+import type { PaletteModel } from './palette';
+import { Tabs, helpPane } from './panel';
 import { showMorningReport } from './morningReport';
-import { type StoolView, type View, draw } from './render';
+import type { StoolView, View } from './render';
+import { readRoute, routeUrl } from './route';
 import { ShareCard, VisitBanner, leaveVisit, showSpoilerWarning } from './share';
 import { downloadSave, showSlotScreen } from './slots';
-import { SLOTS, migrateLegacySave, openSlot, writeSave } from './storage';
-import { ROWS_WAIT, tipContent } from './tips';
+import { AUTOSAVE_MS, SLOTS, migrateLegacySave, openSlot, writeSave } from './storage';
+import { ROWS_WAIT } from './tips';
 import { Toast } from './toast';
-import { type ToolId, Tools } from './tools';
-import { Tooltip } from './tooltip';
 import { type Box, type StoolExample, type TourStepId, TOUR_STEPS, Tour, offerTour } from './tutorial';
 
-/** How often the shop is saved while open, in milliseconds. */
-const AUTOSAVE_MS = 2000;
 /** How long after a first click on the row for sale a second one buys it. */
 const ROW_ASK_MS = 4000;
 /** Happenings kept in the log. */
@@ -62,45 +59,11 @@ const REFUND_HINT = {
   touch: 'Tap a piece on the floor to see it. Delete gives back every coin it cost.',
 };
 
-class App {
-  readonly shop: Shop;
-  readonly editor: Editor;
-  readonly geo = new Geometry();
-  hover: Spot | null = null;
-  inspect: Spot | null = null;
-  /** The mouse is over the row for sale above the floor. */
-  overRowForSale = false;
+class App extends FloorApp<Shop> {
   /** When the row for sale was first clicked or tapped: a second, soon after, buys it (Q76). */
   private rowAskedAt: number | null = null;
-  /** On a touch screen, the tile the ghost of what is in hand sits on (Q72). */
-  cursor: Spot | null = null;
-  selectMode = false;
-  running = true;
-  /** The words for the controls: a finger's, or a mouse's and the keys'. */
-  private readonly touch = touchFirst();
-  speed = 1;
-  private timer: number | undefined;
-  private readouts = new Map<number, { tick: number; roast: Roast | null }>();
-  private floorArea = el('div', { className: 'floor-area' });
-  private canvas = el('canvas', { className: 'floor' });
-  /** Sprites are rasterised once and redrawn when they arrive. */
-  private sprites = new SpriteBank(() => this.render());
-  private ctx: CanvasRenderingContext2D;
-  private panel: Panel;
-  private palette: Palette;
-  private tools: Tools;
-  private tabs: Tabs;
-  private guide = new Guide();
-  private shell: Shell;
+  private readonly debug: boolean;
   private regularsPanel = new RegularsPanel();
-  private stick = new Joystick({
-    step: (dir) => this.stepCursor(dir),
-    tap: () => {
-      this.placeAtCursor();
-      this.render();
-    },
-  });
-  private tooltip = new Tooltip(tipContent);
   private notes: string[] = [];
   private catCard = new CatCard({
     getName: () => this.shop.catName,
@@ -110,6 +73,8 @@ class App {
     isMad: () => this.catMad(),
     render: () => this.render(),
   });
+  /** The ladders of workbench puzzles, in the Workbench tab (Q77). */
+  private benchList = new BenchList(PUZZLES, (id) => this.toBench(id));
   /** Steady state is recomputed only when the layout or the seats change. */
   private stripCache: { layout: Layout; seats: number; strip: StripCell[] | null } | null = null;
   private statsCache: { layout: Layout; seats: number; stats: ShopStats } | null = null;
@@ -132,55 +97,35 @@ class App {
    */
   constructor(root: HTMLElement, debug: boolean, opening: Opening, notice = '') {
     const visit = 'visit' in opening ? opening.visit : null;
-    this.slot = 'slot' in opening ? opening.slot : null;
-    const loaded = this.slot === null ? null : openSlot(REGULARS, debug, this.slot);
-    this.shop = visit ?? loaded?.shop ?? new Shop({ defs: REGULARS, debug });
+    const slot = 'slot' in opening ? opening.slot : null;
+    const loaded = slot === null ? null : openSlot(REGULARS, debug, slot);
+    const shop = visit ?? loaded?.shop ?? new Shop({ defs: REGULARS, debug });
+    super(shop, { cols: COLS, counter: true }, touchFirst() ? REFUND_HINT.touch : REFUND_HINT.mouse);
+    this.debug = debug;
+    this.slot = slot;
     if (visit) this.notes.push(`Visiting ${shopTitle(visit.shopName)}: the floor starts empty and fills within a loop or two. Nothing here is saved.`);
     else this.notes.push(loaded ? 'Welcome back. The floor starts empty and fills again within a loop or two.' : `${REGULARS[0].name} walks in: "${REGULARS[0].intro}"`);
-    this.editor = new Editor(this.shop);
     if (loaded) this.fixOldSave();
     if (notice) this.notes.unshift(notice);
     const report = loaded ? applyOffline(this.shop, loaded.lastSeen, Date.now()) : null;
-    this.ctx = this.canvas.getContext('2d')!;
-    this.panel = new Panel(
-      {
-        togglePause: () => this.togglePause(),
-        stepOnce: () => this.stepOnce(),
-        setSpeed: (n) => {
-          this.speed = n;
-          this.schedule();
-          this.render();
-        },
-      },
-      this.touch ? REFUND_HINT.touch : REFUND_HINT.mouse,
-    );
-    this.palette = new Palette((p) => {
-      this.editor.pick(p);
-      if (this.editor.hand) {
-        this.selectMode = false;
-        // A finger's ghost may start on the tile last tapped (syncCursor); a mouse has its own hover.
-        if (!this.touch) this.inspect = null;
-      }
-      this.render();
-    });
-    this.tools = new Tools((id) => {
-      this.tool(id);
-      this.render();
-    });
     const catHint = el('p', { className: 'muted' }, `${this.touch ? 'Tap' : 'Click'} your cat on the floor to name it or pet it.`);
     let shopPane: Node[];
+    let benchPane: Node[];
     if (visit) {
       this.visitBanner = new VisitBanner(visit);
       const note = 'You are visiting a shared shop. Sharing, exporting and the save slots are in your own shops.';
       shopPane = [el('p', { className: 'muted' }, note), this.catCard.root, catHint];
+      benchPane = [el('p', { className: 'muted' }, 'The workbench puzzles are in your own shops.')];
     } else {
       this.shareCard = new ShareCard(this.shop, () => this.stats());
       shopPane = [this.shareCard.root, this.saveCard(), this.catCard.root, catHint];
+      benchPane = [this.benchList.root];
     }
     this.tabs = new Tabs(
       [
         { id: 'regulars', label: 'Regulars', content: [this.regularsPanel.list] },
         { id: 'log', label: 'Happenings', content: [this.regularsPanel.log] },
+        { id: 'bench', label: 'Workbench', content: benchPane },
         { id: 'guide', label: 'Guide', content: [this.guide.root] },
         { id: 'help', label: 'Help', content: helpPane(() => this.startTour(), this.touch) },
         { id: 'shop', label: 'Shop', content: shopPane },
@@ -207,9 +152,6 @@ class App {
       },
       () => this.render(),
     );
-    bindInput(this.canvas, this);
-    // The floor fills whatever room the panels leave it, and is redrawn when that changes.
-    new ResizeObserver(() => this.render()).observe(this.floorArea);
     // A visit is never saved, so it can never overwrite the player's own shop.
     if (!visit) {
       this.save();
@@ -230,10 +172,12 @@ class App {
         offer();
       });
     } else offer();
-    this.schedule();
-    this.render();
-    // The canvas draws text in the canvas's own fonts; redraw once they have loaded.
-    document.fonts?.ready.then(() => this.render());
+    this.start();
+  }
+
+  /** The shop this screen runs. */
+  get shop(): Shop {
+    return this.floor;
   }
 
   private save(): void {
@@ -262,7 +206,7 @@ class App {
     const exportBtn = el('button', { textContent: 'Export save' });
     exportBtn.onclick = () => downloadSave(saveShop(this.shop, Date.now()));
     const slots = el('button', { textContent: 'Back to save slots' });
-    slots.onclick = () => this.toSlots();
+    slots.onclick = () => this.leave(null);
     return el(
       'div',
       { className: 'card save-card' },
@@ -272,11 +216,17 @@ class App {
     );
   }
 
-  /** Save, and go back to the save slots. */
-  private toSlots(): void {
+  /** Save, and leave the shop: for the save slots, or for a workbench puzzle (Q77), which counts as time away. */
+  private leave(bench: string | null): void {
     this.save();
     this.leaving = true;
-    location.reload();
+    this.stop();
+    location.assign(routeUrl(location.pathname, { debug: this.debug, slot: bench ? this.slot : null, bench }));
+  }
+
+  /** Go to the workbench for a puzzle. The shop is saved as it stands, and the time there is time away. */
+  private toBench(id: string): void {
+    if (this.slot !== null) this.leave(id);
   }
 
   private offerTour(): void {
@@ -307,6 +257,7 @@ class App {
         pieces: () => this.palette.pieceButtons(START_PIECES),
         till: () => (this.shell.compact ? this.panel.coins : this.panel.tillCard),
         help: () => (this.shell.compact ? this.shell.menu : this.tabs.button('help')),
+        bench: () => (this.shell.compact ? this.shell.menu : this.tabs.button('bench')),
         floor: (part) => this.floorBox(part),
         prepare: (step) => this.prepareTour(step),
       },
@@ -362,23 +313,9 @@ class App {
     return catSpot(Math.max(0, this.shop.T - 1), this.catSeat() >= 0);
   }
 
-  /** A tap holding something. On a touch screen it moves the ghost there, or puts the piece down if the ghost is there already. */
   tapHolding(spot: Spot): void {
-    const ed = this.editor;
     this.rowAskedAt = null;
-    if (spot.row < 0) {
-      ed.message = 'The counter is fixed';
-      return;
-    }
-    // A touch screen on a computer that has a mouse too: a tap puts the piece down where it lands.
-    if (!this.touch) {
-      ed.press(spot.row, spot.col);
-      ed.release();
-      return;
-    }
-    const c = this.cursor;
-    if (c && c.row === spot.row && c.col === spot.col) return this.placeAtCursor();
-    this.moveCursor(spot);
+    super.tapHolding(spot);
   }
 
   /**
@@ -407,91 +344,15 @@ class App {
   }
 
   /** The row for sale's words and look on the floor. */
-  private forSale(): View['forSale'] {
+  private forSale(): NonNullable<View['forSale']> {
     const hot = this.overRowForSale;
     if (this.shop.rowsLocked()) return { look: 'locked', hot, label: `Rows for sale once ${ROWS_WAIT}` };
     if (this.rowAsked()) return { look: 'armed', hot, label: `Buy a row for ${FLOOR_ROW_PRICE}? ${this.touch ? 'Tap' : 'Click'} again` };
     return { look: 'open', hot, label: `+ Buy a row · ${FLOOR_ROW_PRICE}` };
   }
 
-  /** The stick moved the ghost one tile. */
-  private stepCursor(dir: Dir): void {
-    if (!this.cursor || !this.editor.hand) return;
-    const to = stepSpot(this.cursor, dir, this.shop.layout.rows);
-    if (to.row !== this.cursor.row || to.col !== this.cursor.col) this.moveCursor(to);
-    else this.keepInView(to);
-    this.render();
-  }
-
-  /** Move the ghost to a tile, laying belts on the way if a run is being laid, and bring it into view. */
-  private moveCursor(to: Spot): void {
-    this.cursor = to;
-    if (this.editor.dragging) this.editor.dragTo(to.row, to.col);
-    this.keepInView(to);
-  }
-
-  /**
-   * The knob, or a tap on the ghost: put the piece or group down there.
-   * Holding a belt, the first tap starts a run that follows the ghost and the
-   * next tap ends it, as pressing and releasing the mouse would.
-   */
-  private placeAtCursor(): void {
-    const ed = this.editor;
-    const c = this.cursor;
-    if (!c || !ed.hand) return;
-    const belt = ed.hand.type === 'piece' && ed.hand.piece === 'belt';
-    if (belt && ed.dragging) {
-      ed.release();
-      ed.message = 'Run of belts finished';
-      return;
-    }
-    ed.press(c.row, c.col);
-    if (belt && ed.dragging) ed.message = 'Laying belts: move the stick, then tap Stop';
-  }
-
-  /** The tile in the middle of the floor in view. */
-  private middleSpot(): Spot {
-    const g = this.geo;
-    const clamp = (n: number, hi: number) => Math.max(0, Math.min(hi, n));
-    const col = clamp(Math.floor((g.width / 2 - g.x0) / g.tile), COLS - 1);
-    const row = clamp(Math.floor((g.counterY + g.camY - (PAD + g.counterY) / 2) / g.tile), this.shop.layout.rows - 1);
-    return { row, col };
-  }
-
-  /** Move the camera just enough to show a back-room tile, with half a tile to spare. */
-  private keepInView(spot: Spot): void {
-    const g = this.geo;
-    const { x, y } = g.tileXY(spot.row, spot.col);
-    const spare = g.tile / 2;
-    let dx = 0;
-    let dy = 0;
-    if (x < PAD + spare) dx = PAD + spare - x;
-    else if (x + g.tile > g.width - PAD - spare) dx = g.width - PAD - spare - (x + g.tile);
-    if (y < PAD + spare) dy = PAD + spare - y;
-    else if (y + g.tile > g.counterY - spare) dy = g.counterY - spare - (y + g.tile);
-    g.pan(dx, dy);
-  }
-
-  /**
-   * Keep the ghost in step with the hand: none while the hand is empty; a new
-   * one on the tile last tapped, if it is still in view (so a cut or a copy
-   * starts where the piece was), else in the middle of the floor in view (Q75).
-   */
-  private syncCursor(): void {
-    if (!this.editor.hand) {
-      this.cursor = null;
-      return;
-    }
-    if (!this.touch || (this.cursor && this.cursor.row < this.shop.layout.rows)) return;
-    const t = this.inspect;
-    const from = t && t.row >= 0 && t.row < this.shop.layout.rows && this.geo.shows(t.row, t.col) ? t : null;
-    this.cursor = from ?? this.middleSpot();
-    this.inspect = null;
-    this.keepInView(this.cursor);
-  }
-
   clickFloor(spot: Spot): void {
-    this.inspect = spot;
+    super.clickFloor(spot);
     this.rowAskedAt = null;
     const cat = this.catAt();
     if (spot.row === cat.row && spot.col === cat.col) {
@@ -501,113 +362,11 @@ class App {
     }
   }
 
-  /** A button in the tool bar. */
-  private tool(id: ToolId): void {
-    const ed = this.editor;
-    // Anything but turning or reading the rules ends a run of belts being laid, as one undo step.
-    if (id !== 'turn' && id !== 'flip' && id !== 'info') ed.release();
-    const target = this.inspect && this.inspect.row >= 0 ? this.inspect : null;
-    // Delete, cut and copy work on the box if there is one, else on the tile last tapped.
-    const onTiles = (box: () => void, tile: (r: number, c: number) => void) => {
-      if (ed.selection) box();
-      else if (target) tile(target.row, target.col);
-      else if (this.selectMode) ed.message = 'Drag a box over the floor first';
-      else ed.message = this.touch ? 'Tap a piece on the floor first' : 'Click a piece on the floor first';
-      if (!ed.selection) this.selectMode = false;
-    };
-    switch (id) {
-      case 'turn':
-        return ed.rotateHand();
-      case 'flip':
-        return ed.flipHand();
-      case 'drop':
-        ed.putDown();
-        this.inspect = null;
-        return;
-      case 'older':
-        return ed.wheel(1);
-      case 'newer':
-        return ed.wheel(-1);
-      case 'info':
-        if (ed.hand?.type === 'piece') this.openGuide(`piece:${ed.hand.piece}`);
-        return;
-      case 'select':
-        this.selectMode = !this.selectMode;
-        ed.selection = null;
-        ed.message = this.selectMode ? `Drag a box over the floor${this.touch ? '' : ' (or Shift+drag at any time)'}` : '';
-        return;
-      case 'delete':
-        return onTiles(
-          () => ed.deleteKey(0, 0),
-          (r, c) => ed.deleteKey(r, c),
-        );
-      case 'cut':
-        return onTiles(
-          () => ed.cut('box'),
-          (r, c) => ed.cut('hover', r, c),
-        );
-      case 'copy':
-        return onTiles(
-          () => ed.copy('box'),
-          (r, c) => ed.copy('hover', r, c),
-        );
-      case 'paste':
-        return ed.pickUpBuffer();
-      case 'undo':
-        return ed.undo();
-      case 'redo':
-        return ed.redo();
-    }
-  }
-
-  /** Show the Guide tab at an entry, opening the drawer in a narrow window. */
-  private openGuide(key: string): void {
-    this.tabs.select('guide');
-    this.shell.openDrawer();
-    this.render();
-    requestAnimationFrame(() => this.guide.open(key));
-  }
-
-  rows(): number {
-    return this.shop.layout.rows;
-  }
-
-  /** Move the camera over the back room. */
-  pan(dx: number, dy: number): void {
-    this.geo.pan(dx, dy);
-    this.render();
-  }
-
-  /** Zoom the floor about a point on the canvas. */
-  zoom(x: number, y: number, factor: number): void {
-    this.geo.zoomAt(x, y, factor);
-    this.render();
-  }
-
-  togglePause(): void {
-    this.running = !this.running;
-    this.schedule();
-    this.render();
-  }
-
-  stepOnce(): void {
-    if (this.running) return;
-    this.advance();
-  }
-
-  private schedule(): void {
-    window.clearInterval(this.timer);
-    if (this.running) this.timer = window.setInterval(() => this.advance(), 1000 / this.speed);
-  }
-
-  private advance(): void {
+  protected tickFloor(): SimEvent[] {
     const report = this.shop.tick();
-    for (const e of report.events) {
-      if (e.type === 'brew') this.readouts.set(e.at, { tick: e.tick, roast: 'roast' in e.item ? e.item.roast : null });
-    }
     this.notes = [...report.notes.map((n) => `${report.T % 12}: ${n}`).reverse(), ...this.notes].slice(0, NOTES_KEPT);
     if (report.walkedIn) this.toast.walkIn(report.walkedIn);
-    this.render();
+    return report.events;
   }
 
   /** Bring a regular's stool into view, or the cat's bowl. */
@@ -618,7 +377,7 @@ class App {
     this.render();
   }
 
-  private hoverInfo(): string {
+  protected hoverInfo(): string {
     if (this.overRowForSale) {
       const locked = this.shop.rowsLocked();
       return locked ? `${locked}. The ${START_ROWS} rows you start with are plenty until then.` : `A row for ${FLOOR_ROW_PRICE} coins: one more row at the back of the floor, with its own feeder tile. Never refunded.`;
@@ -633,32 +392,13 @@ class App {
       const steady = ticks.length ? `in steady state a cup sits here on ticks ${ticks.join(', ')}` : 'no cup here in steady state';
       return `Counter, column ${h.col}, slot ${slotOf(this.shop.T - 1, h.col)} passing${item ? ': ' + itemName(item) : ''} · ${steady}`;
     }
-    const i = tileIndex(h.row, h.col);
-    const s = layout.tiles[i];
-    const item = sim.belts[i];
-    const parts = [`Row ${h.row}, column ${h.col}`];
-    if (s) parts.push(`${s.kind} (${structureToken(s)})`);
-    const piece = s ? pieceOf(s.kind) : null;
-    if (piece) parts.push(this.touch ? `Delete gives all ${PIECE_PRICE[piece]} back` : `Z deletes it, all ${PIECE_PRICE[piece]} back`);
-    if (item) parts.push(`holding ${itemName(item)}`);
+    const parts = this.tileInfo(h);
+    const s = layout.tiles[tileIndex(h.row, h.col)];
     if (s?.kind === 'bowl') parts.push(this.catSeat() >= 0 ? 'the cat wants warm milk here on tick 10' : 'the cat is not asking yet');
     if (s?.kind === 'feeder') parts.push(`the only way onto the counter; slot ${feederSlot(this.shop.T - 1, h.row)} is passing`);
-    if (s?.kind === 'splitter') parts.push(this.splitterInfo(i));
     const cat = this.catAt();
     if (cat.row === h.row && cat.col === h.col) parts.push(`${this.shop.catName || 'your cat'} (${this.touch ? 'tap' : 'click'} to name or pet)`);
-    const ro = this.readouts.get(i);
-    if (s?.kind === 'kettle' && ro) parts.push(`last input landed on tick ${ro.tick}${ro.roast ? `: ${ro.roast}` : ''}`);
     return parts.join(' · ');
-  }
-
-  /** A splitter's round: its outputs in order, what has passed since tick 0, and where the next item goes. */
-  private splitterInfo(i: number): string {
-    const name = { N: 'north', E: 'east', S: 'south', W: 'west' } as const;
-    const outs = splitterOutputs(this.shop.layout, i);
-    if (outs.length === 0) return 'no outputs: whatever lands here spills';
-    const passed = clockTick(this.shop.T) === 0 ? 0 : (this.shop.sim.splitters[i] ?? 0);
-    const next = splitterNext(this.shop.layout, this.shop.sim, i)!;
-    return `outputs ${outs.map((d) => name[d]).join(', ')}, in that order; ${passed} item${passed === 1 ? '' : 's'} passed since tick 0, whatever they were; the next goes ${name[next]}`;
   }
 
   /** What the counter strip says about the stool in column `col`. */
@@ -739,42 +479,32 @@ class App {
       });
   }
 
-  render(): void {
-    // The Select tool is for an empty hand: whatever put something in hand (a key, a cut, a paste) turns it off.
-    if (this.editor.hand) this.selectMode = false;
-    // The canvas fills the floor area, at the screen's own pixel density so the lines stay crisp.
-    const w = this.floorArea.clientWidth;
-    const h = this.floorArea.clientHeight;
-    const dpr = window.devicePixelRatio || 1;
-    if (this.canvas.width !== Math.round(w * dpr) || this.canvas.height !== Math.round(h * dpr)) {
-      this.canvas.width = Math.round(w * dpr);
-      this.canvas.height = Math.round(h * dpr);
-      this.canvas.style.width = `${w}px`;
-      this.canvas.style.height = `${h}px`;
-    }
-    this.geo.fit(w, h, this.shop.layout.rows, this.touch ? MIN_TOUCH_TILE : MIN_TILE);
-    this.syncCursor();
-    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const view: View = {
-      shop: this.shop,
-      editor: this.editor,
-      geo: this.geo,
-      // A finger's hand shows its ghost where the stick has put it.
-      hover: this.cursor ?? this.hover,
-      ghostCursor: this.cursor !== null,
+  protected floorParts(): Pick<View, 'forSale' | 'stools' | 'cat' | 'bench'> {
+    return {
       forSale: this.forSale(),
-      inspect: this.inspect,
-      panHint: this.touch ? 'drag to look' : 'right-drag or scroll',
-      readouts: this.readouts,
       stools: this.stools(),
       cat: { spot: this.catAt(), heart: this.catCard.heart, mad: this.catMad() },
-      sprites: this.sprites,
-      dpr,
+      bench: null,
     };
-    draw(this.ctx, view);
+  }
+
+  protected paletteModel(): PaletteModel {
     const rights = this.shop.rights();
     const wells = this.shop.layout.tiles.filter((s) => s?.kind === 'well').length;
     const hand = this.editor.hand;
+    return {
+      palette: ALL_PIECES.map((piece) => ({
+        piece,
+        locked: !rights.unlocked.has(piece),
+        note: piece === 'well' && Number.isFinite(rights.wellLimit) ? `${wells}/${rights.wellLimit}` : '',
+      })),
+      inHand: hand ? (hand.type === 'piece' ? hand.piece : 'group') : null,
+      keys: !this.touch,
+    };
+  }
+
+  protected updatePanels(): void {
+    const rights = this.shop.rights();
     this.panel.update({
       T: this.shop.T,
       running: this.running,
@@ -787,38 +517,10 @@ class App {
       seated: this.seatedInfo(),
       message: this.editor.message,
       hoverInfo: this.hoverInfo(),
-      bufferInfo: this.editor.buffer.entries.length
-        ? `Paste buffer: ${this.editor.buffer.entries.length} entr${this.editor.buffer.entries.length === 1 ? 'y' : 'ies'}`
-        : '',
+      bufferInfo: this.bufferInfo(),
     });
-    this.palette.update({
-      palette: ALL_PIECES.map((piece) => ({
-        piece,
-        locked: !rights.unlocked.has(piece),
-        note: piece === 'well' && Number.isFinite(rights.wellLimit) ? `${wells}/${rights.wellLimit}` : '',
-      })),
-      inHand: hand ? (hand.type === 'piece' ? hand.piece : 'group') : null,
-      keys: !this.touch,
-    });
-    const belt = hand?.type === 'piece' && hand.piece === 'belt';
-    const steering = this.cursor !== null;
-    this.stick.set(steering, belt ? (this.editor.dragging ? 'Stop' : 'Lay') : 'Place');
-    this.shell.setHolding(steering);
-    this.tools.update({
-      hand: hand ? hand.type : 'none',
-      canFlip: this.editor.canFlip,
-      // Beside the stick, in a narrow window, only what steers the ghost fits.
-      stick: steering && this.shell.compact,
-      selectMode: this.selectMode,
-      buffer: this.editor.buffer.entries.length,
-      canUndo: this.editor.canUndo,
-      canRedo: this.editor.canRedo,
-    });
-    this.guide.update({
-      unlocked: rights.unlocked,
-      rowsLocked: this.shop.rowsLocked() !== null,
-      regulars: this.shop.regulars.map((_, i) => this.shop.defs[i]),
-    });
+    const walkedIn = this.shop.regulars.map((_, i) => this.shop.defs[i]);
+    this.guide.update({ unlocked: rights.unlocked, rowsLocked: this.shop.rowsLocked() !== null, drinks: drinksOrdered(walkedIn) });
     this.regularsPanel.update(
       this.shop.defs,
       this.shop.regulars,
@@ -826,10 +528,10 @@ class App {
       this.shop.newcomer(),
       this.notes,
     );
+    this.benchList.update(rights.unlocked, new Set(this.shop.bench.solved));
     this.visitBanner?.update(this.stats());
     // The share card's numbers need steady state, so they are worked out only while it shows.
     if (this.tabs.current === 'shop') this.shareCard?.update();
-    this.tooltip.refresh();
   }
 }
 
@@ -841,12 +543,15 @@ function ownProgress(debug: boolean): Progress {
 }
 
 /**
- * Open the shop the URL names. A share link in the fragment opens someone
+ * Open what the address names. A share link in the fragment opens someone
  * else's shop as a visit; a player whose furthest shop is behind it is warned
- * of spoilers first. Anything else shows the save slots, to open one of the
- * player's own shops or start a new one.
+ * of spoilers first. A slot in the query opens that slot's shop, or one of
+ * its workbench puzzles (Q77). Anything else shows the save slots, to open
+ * one of the player's own shops or start a new one.
  */
-function open(root: HTMLElement, debug: boolean): void {
+function open(root: HTMLElement): void {
+  const route = readRoute(location.search);
+  const debug = route.debug;
   // Pasting another link into the address bar reopens the page on what it names.
   window.addEventListener('hashchange', () => location.reload());
   // The one save from before there were slots moves into the first empty slot.
@@ -859,6 +564,17 @@ function open(root: HTMLElement, debug: boolean): void {
     if (import.meta.env.DEV) (window as unknown as { ticktock: App }).ticktock = app;
   };
   const slots = (notice = '') => showSlotScreen({ defs: REGULARS, debug, notice, open: (slot) => start({ slot }) });
+  if (!fragment && route.slot !== null && SLOTS.includes(route.slot)) {
+    if (route.bench) {
+      const why = openBench(root, debug, route.slot, route.bench);
+      if (why === null) return;
+      history.replaceState(null, '', routeUrl(location.pathname, { debug, slot: null, bench: null }));
+      return slots(why);
+    }
+    // Straight into the shop, as on coming back from the workbench. A reload from here shows the slots, as ever.
+    history.replaceState(null, '', routeUrl(location.pathname, { debug, slot: null, bench: null }));
+    return start({ slot: route.slot });
+  }
   if (!shared) {
     if (!fragment) return slots();
     // A link that does not open a shop: drop it, and show the player's own.
@@ -872,4 +588,4 @@ function open(root: HTMLElement, debug: boolean): void {
   showSpoilerWarning(shared.name, stats, own, { open: () => start({ visit }), back: leaveVisit });
 }
 
-open(document.getElementById('app')!, new URLSearchParams(location.search).has('debug'));
+open(document.getElementById('app')!);

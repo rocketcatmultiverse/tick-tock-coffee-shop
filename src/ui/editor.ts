@@ -3,10 +3,9 @@
 
 import type { Dir, Structure } from '../sim/types';
 import { colOf, rowOf, stepFrom, tileIndex, turnClockwise, flipDir } from '../sim/grid';
-import { type BuildPlan, type TileChange, chutePartner, planBuild } from '../game/build';
-import { PIECE_LABEL, type PieceKind, isFixed } from '../game/pieces';
+import { type BuildPlan, type BuildTarget, type TileChange, chutePartner, fixedAt, planBuild } from '../game/build';
+import { PIECE_LABEL, type PieceKind } from '../game/pieces';
 import { BUFFER_HISTORY } from '../game/tuning';
-import type { Shop } from '../game/shop';
 import {
   type BufferHistory,
   type Entry,
@@ -34,6 +33,9 @@ export interface Rect {
 
 type AppliedPlan = Extract<BuildPlan, { ok: true }>;
 
+/** "1 piece", "3 pieces". */
+const pieces = (n: number) => `${n} piece${n === 1 ? '' : 's'}`;
+
 /** One undo step: each tile it touched, as it was before and after. */
 type Action = Map<number, { before: Structure | null; after: Structure | null }>;
 
@@ -54,7 +56,8 @@ export class Editor {
   private drag: { action: Action; last: number; placed: Set<number> } | null = null;
   private selectFrom: { row: number; col: number } | null = null;
 
-  constructor(private readonly shop: Shop) {}
+  /** Edits the shop's floor, or a workbench puzzle's bench, where building is free. */
+  constructor(private readonly target: BuildTarget) {}
 
   get canUndo(): boolean {
     return this.undoStack.length > 0;
@@ -72,8 +75,9 @@ export class Editor {
   // ---- The hand -------------------------------------------------------------
 
   pick(piece: PieceKind): void {
-    if (!this.shop.rights().unlocked.has(piece)) {
-      this.message = 'Not unlocked yet: a regular still to come brings it';
+    const rights = this.target.rights();
+    if (!rights.unlocked.has(piece)) {
+      this.message = rights.board ? 'Not in this puzzle' : 'Not unlocked yet: a regular still to come brings it';
       return;
     }
     // A run of belts being laid ends here, as one undo step.
@@ -132,7 +136,7 @@ export class Editor {
   // ---- Placing --------------------------------------------------------------
 
   private pieceChanges(piece: PieceKind, dir: Dir, row: number, col: number): TileChange[] | string {
-    const layout = this.shop.layout;
+    const layout = this.target.layout;
     if (row < 0 || row >= layout.rows) return 'Off the floor';
     const index = tileIndex(row, col);
     if (layout.tiles[index]?.kind === 'feeder') return 'The feeder is fixed';
@@ -175,14 +179,14 @@ export class Editor {
     const changes =
       this.hand.type === 'piece'
         ? this.pieceChanges(this.hand.piece, this.hand.dir, row, col)
-        : pasteChanges(this.shop.layout, this.hand.entry, row, col);
+        : pasteChanges(this.target.layout, this.hand.entry, row, col);
     if (typeof changes === 'string') return { changes: [], reason: changes, cost: 0 };
     const plan = this.preview(changes);
     return { changes, reason: plan.ok ? null : plan.reason, cost: plan.ok ? plan.cost : 0 };
   }
 
   private preview(changes: TileChange[]): BuildPlan {
-    return planBuild(this.shop.layout, changes, this.shop.rights(), this.shop.till);
+    return planBuild(this.target.layout, changes, this.target.rights(), this.target.till);
   }
 
   /** Click with something in hand. Belts start a drag; see dragTo. */
@@ -191,7 +195,7 @@ export class Editor {
     if (this.hand.type === 'piece' && this.hand.piece === 'belt') {
       this.drag = { action: new Map(), last: -1, placed: new Set() };
       this.layBelt(row, col, this.hand.dir);
-      if (row >= 0 && row < this.shop.layout.rows) this.drag.last = tileIndex(row, col);
+      if (row >= 0 && row < this.target.layout.rows) this.drag.last = tileIndex(row, col);
       return;
     }
     const g = this.ghost(row, col);
@@ -201,14 +205,14 @@ export class Editor {
       return;
     }
     this.commit(g.changes);
-    if (this.hand.type === 'group') this.message = `Pasted ${g.changes.length} piece(s) for ${g.cost}`;
+    if (this.hand.type === 'group') this.message = `Pasted ${pieces(g.changes.length)}${this.target.free ? '' : ` for ${g.cost}`}`;
   }
 
   /** Dragging a belt: each new tile gets a belt, and the belt before it turns to point at it. */
   dragTo(row: number, col: number): void {
     const drag = this.drag;
     if (!drag || drag.last < 0 || this.hand?.type !== 'piece') return;
-    if (row < 0 || row >= this.shop.layout.rows) return;
+    if (row < 0 || row >= this.target.layout.rows) return;
     let r = rowOf(drag.last);
     let c = colOf(drag.last);
     while (r !== row || c !== col) {
@@ -245,7 +249,7 @@ export class Editor {
 
   selectTo(row: number, col: number): void {
     if (!this.selectFrom) return;
-    const rows = this.shop.layout.rows;
+    const rows = this.target.layout.rows;
     const clampR = (r: number) => Math.max(0, Math.min(rows - 1, r));
     this.selection = {
       r0: clampR(Math.min(this.selectFrom.row, row)),
@@ -265,11 +269,11 @@ export class Editor {
 
   /** Back-room tiles holding something movable, with both ends of any chute. */
   private gather(indices: number[]): number[] {
-    const layout = this.shop.layout;
+    const layout = this.target.layout;
+    const rights = this.target.rights();
     const out = new Set<number>();
     for (const i of indices) {
-      const s = layout.tiles[i];
-      if (!s || isFixed(s)) continue;
+      if (!layout.tiles[i] || fixedAt(layout, rights, i)) continue;
       out.add(i);
       const p = chutePartner(layout, i);
       if (p !== null) out.add(p);
@@ -278,7 +282,7 @@ export class Editor {
   }
 
   private hovered(row: number, col: number): number[] {
-    if (row < 0 || row >= this.shop.layout.rows) return [];
+    if (row < 0 || row >= this.target.layout.rows) return [];
     return this.gather([tileIndex(row, col)]);
   }
 
@@ -312,10 +316,10 @@ export class Editor {
       this.message = 'Nothing to copy';
       return;
     }
-    this.buffer = pushEntry(this.buffer, entryFromTiles(this.shop.layout, list), BUFFER_HISTORY);
+    this.buffer = pushEntry(this.buffer, entryFromTiles(this.target.layout, list), BUFFER_HISTORY);
     this.selection = null;
     this.pickUpBuffer();
-    this.message = `Copied ${list.length} piece(s)`;
+    this.message = `Copied ${pieces(list.length)}`;
   }
 
   private remove(tiles: number[], verb: string): boolean {
@@ -323,11 +327,11 @@ export class Editor {
       this.message = 'Nothing there';
       return false;
     }
-    const entry = entryFromTiles(this.shop.layout, tiles);
+    const entry = entryFromTiles(this.target.layout, tiles);
     const plan = this.commit(tiles.map((index) => ({ index, to: null })));
     if (!plan) return false;
     this.buffer = pushEntry(this.buffer, entry, BUFFER_HISTORY);
-    this.message = `${verb} ${tiles.length} piece(s): ${-plan.cost} coins back, a full refund`;
+    this.message = `${verb} ${pieces(tiles.length)}${this.target.free ? '' : `: ${-plan.cost} coins back, a full refund`}`;
     return true;
   }
 
@@ -355,7 +359,7 @@ export class Editor {
 
   private replay(action: Action, side: 'before' | 'after'): boolean {
     const changes = [...action.entries()].map(([index, v]) => ({ index, to: v[side] }));
-    const plan = this.shop.build(changes);
+    const plan = this.target.build(changes);
     if (!plan.ok) {
       this.message = `Cannot ${side === 'before' ? 'undo' : 'redo'}: ${plan.reason}`;
       return false;
@@ -376,7 +380,7 @@ export class Editor {
 
   /** Apply an edit to the live shop, folding it into `action`. */
   private apply(changes: TileChange[], action: Action): AppliedPlan | null {
-    const plan = this.shop.build(changes);
+    const plan = this.target.build(changes);
     if (!plan.ok) {
       this.message = plan.reason;
       return null;
@@ -385,7 +389,8 @@ export class Editor {
       const prev = action.get(ch.index);
       action.set(ch.index, { before: prev ? prev.before : plan.before[i], after: ch.to });
     });
-    if (plan.cost > 0) this.message = `${describe(changes)} for ${plan.cost}`;
+    if (this.target.free) this.message = describe(changes);
+    else if (plan.cost > 0) this.message = `${describe(changes)} for ${plan.cost}`;
     return plan;
   }
 
@@ -399,5 +404,5 @@ function describe(changes: TileChange[]): string {
   const first = changes[0]?.to;
   if (changes.length === 1 && first) return `Placed ${first.kind}`;
   if (changes.length === 2 && first?.kind === 'launch') return `Placed ${PIECE_LABEL.chute.toLowerCase()}`;
-  return `Placed ${changes.length} pieces`;
+  return `Placed ${pieces(changes.length)}`;
 }

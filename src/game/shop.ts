@@ -6,6 +6,7 @@ import { adaptState, emptyState, itemName, step, visitLength, visitOffset } from
 import type { Drink, Item, Layout, RegularDef, Seat, SimEvent, SimState } from '../sim/types';
 import { COLS, LOOP, MILK_TICK } from '../sim/tuning';
 import { type BuildPlan, type BuildRights, type TileChange, brokenChute, floorValue, planBuild, rightsAfter, startLayout, tileValue } from './build';
+import { type BenchProgress, type Ladder, laddersOpen, noBenchProgress } from './bench';
 import { ALL_PIECES, PIECE_LABEL, type PieceKind, isFixed } from './pieces';
 import { type RegularState, isMilkDrinker, seatFor } from './regulars';
 import {
@@ -45,6 +46,14 @@ export interface WalkIn {
   unlocked: PieceKind[];
   /** The new limit on wells, if they raised it. */
   wellLimit: number | null;
+  /** Ladders of workbench puzzles their pieces open (docs/QUESTIONS.md, Q77). */
+  ladders: Ladder[];
+}
+
+/** "New at the workbench: mixer and splitter puzzles.": the ladders a walk-in opens, as a line. */
+export function laddersNote(ladders: readonly Ladder[]): string {
+  const names = ladders.map((l) => (l === 'basics' ? 'basic' : PIECE_LABEL[l].toLowerCase()));
+  return names.length ? `New at the workbench: ${names.join(' and ')} puzzles.` : '';
 }
 
 /** A walk-in as a line for the happenings: who, their introduction, and what they bring. */
@@ -53,6 +62,7 @@ export function walkInNote(w: WalkIn): string {
   const extra: string[] = [];
   if (w.unlocked.length) extra.push(`New in the palette: ${w.unlocked.map((p) => PIECE_LABEL[p]).join(', ')}.`);
   if (w.wellLimit !== null) extra.push(`You may now own ${w.wellLimit} wells.`);
+  if (w.ladders.length) extra.push(laddersNote(w.ladders));
   return [`${arrives}: "${w.def.intro}"`, ...extra].join(' ');
 }
 
@@ -79,6 +89,8 @@ export class Shop {
   shopName = '';
   /** The tour has been offered, and taken or skipped. Older saves have not had it offered. */
   tutorialSeen = false;
+  /** Workbench puzzles solved, and the pieces left on each bench (docs/QUESTIONS.md, Q77). */
+  bench: BenchProgress = noBenchProgress();
   /** Regulars who have walked in, in order. The last one may still be new. */
   regulars: RegularState[] = [];
   /** Spills counted on the current loop and on the last full loop. */
@@ -113,6 +125,7 @@ export class Shop {
     catName: string;
     shopName?: string;
     tutorialSeen?: boolean;
+    bench?: BenchProgress;
     regulars: RegularState[];
   }): void {
     this.layout = saved.layout;
@@ -121,6 +134,7 @@ export class Shop {
     this.catName = saved.catName;
     this.shopName = saved.shopName ?? '';
     this.tutorialSeen = saved.tutorialSeen ?? false;
+    this.bench = structuredClone(saved.bench ?? noBenchProgress());
     this.regulars = saved.regulars.map((r) => ({ ...r }));
     this.visitServed = this.regulars.map(() => false);
     // Happiness is not saved: after a load everyone earns it again (docs/QUESTIONS.md, Q62).
@@ -297,10 +311,12 @@ export class Shop {
     this.servedThisLoop.push(false);
     this.sim = adaptState(this.layout, this.layout, this.sim, this.regulars.length);
     const after = this.rights();
+    const opened = new Set(laddersOpen(before.unlocked));
     return {
       def,
       unlocked: ALL_PIECES.filter((p) => after.unlocked.has(p) && !before.unlocked.has(p)),
       wellLimit: after.wellLimit > before.wellLimit ? after.wellLimit : null,
+      ladders: laddersOpen(after.unlocked).filter((l) => !opened.has(l)),
     };
   }
 

@@ -6,6 +6,10 @@
 // sideways the same way, the counter and the stools along with the floor.
 // Above the top row is one more row of tiles, for sale (docs/QUESTIONS.md,
 // Q76): fitted and scrolled to as part of the back room, but not the floor.
+//
+// A workbench puzzle's bench (Q77) has its own width, and no counter, stools
+// or row for sale: it is drawn in the middle of the canvas, with the camera
+// moving over it the same way when it does not fit.
 
 import { COLS } from '../sim/tuning';
 
@@ -35,11 +39,22 @@ const MAX_TILE = 88;
 /** Pinching zooms between these tile sizes, whatever the fitted size. */
 export const ZOOM_MIN_TILE = 24;
 export const ZOOM_MAX_TILE = 112;
+/** A bench is small, so it may be drawn bigger than the shop's floor ever is. */
+const MAX_BENCH_TILE = ZOOM_MAX_TILE;
 
 /** A tile on the floor; row -1 is the counter, row -2 the stool band under it. */
 export type Spot = { row: number; col: number };
 
+/** The floor's shape: the shop's twelve columns over its counter, or a bench of its own width. */
+export interface FloorShape {
+  cols: number;
+  /** The counter, its wooden edge and the stools along the bottom, and the row for sale at the top: the shop has them, a bench does not. */
+  counter: boolean;
+}
+
 export class Geometry {
+  readonly cols: number;
+  readonly counter: boolean;
   tile = 48;
   width = 0;
   height = 0;
@@ -53,6 +68,11 @@ export class Geometry {
   /** The tile size fitted to the canvas, before the zoom. */
   private fitted = 48;
 
+  constructor(shape: FloorShape = { cols: COLS, counter: true }) {
+    this.cols = shape.cols;
+    this.counter = shape.counter;
+  }
+
   /**
    * Size the floor to the canvas: as big as fits its rows (up to
    * MAX_ROWS_IN_VIEW), the counter and the stools, and never smaller than
@@ -62,12 +82,12 @@ export class Geometry {
     this.width = width;
     this.height = height;
     this.rows = rows;
-    // The floor's rows in view, the row for sale above them, and the counter.
-    const inView = Math.max(MIN_ROWS_IN_VIEW, Math.min(MAX_ROWS_IN_VIEW, rows)) + 1;
-    const byHeight = (height - 2 * PAD) / (inView + 1 + WOOD + BAND);
-    const byWidth = (width - 2 * PAD) / COLS;
+    // The floor's rows in view, the row for sale above them, and the counter; or a bench's rows.
+    const inView = this.counter ? Math.max(MIN_ROWS_IN_VIEW, Math.min(MAX_ROWS_IN_VIEW, rows)) + 1 : Math.min(MAX_ROWS_IN_VIEW, rows);
+    const byHeight = (height - 2 * PAD) / (inView + (this.counter ? 1 + WOOD + BAND : 0));
+    const byWidth = (width - 2 * PAD) / this.cols;
     const across = byWidth < minTile ? Math.min(byHeight, minTile * SCROLLING_GROWTH) : byWidth;
-    this.fitted = Math.max(minTile, Math.min(MAX_TILE, Math.floor(Math.min(byHeight, across))));
+    this.fitted = Math.max(minTile, Math.min(this.counter ? MAX_TILE : MAX_BENCH_TILE, Math.floor(Math.min(byHeight, across))));
     this.applyZoom();
     this.pan(0, 0);
   }
@@ -89,15 +109,15 @@ export class Geometry {
   }
 
   get wood(): number {
-    return Math.round(this.tile * WOOD);
+    return this.counter ? Math.round(this.tile * WOOD) : 0;
   }
 
   get band(): number {
-    return Math.round(this.tile * BAND);
+    return this.counter ? Math.round(this.tile * BAND) : 0;
   }
 
   get floorW(): number {
-    return COLS * this.tile;
+    return this.cols * this.tile;
   }
 
   /** Left edge of column 0. */
@@ -106,9 +126,11 @@ export class Geometry {
     return this.floorW <= room ? PAD + Math.round((room - this.floorW) / 2) : PAD - this.camX;
   }
 
-  /** Top of the counter row. */
+  /** Top of the counter row: the bottom of the back room. A bench has no counter, and sits in the middle. */
   get counterY(): number {
-    return this.height - PAD - this.band - this.wood - this.tile;
+    if (this.counter) return this.height - PAD - this.band - this.wood - this.tile;
+    const spare = this.height - 2 * PAD - this.rows * this.tile;
+    return this.height - PAD - Math.max(0, Math.floor(spare / 2));
   }
 
   /** Top of the stool band. */
@@ -123,7 +145,7 @@ export class Geometry {
 
   /** The back room's rows: the floor's, and the row for sale above them. */
   get roomRows(): number {
-    return this.rows + 1;
+    return this.rows + (this.counter ? 1 : 0);
   }
 
   get maxCamY(): number {
@@ -150,7 +172,7 @@ export class Geometry {
   /** Whether a pixel is on the row for sale above the floor's top row. */
   onRowForSale(x: number, y: number): boolean {
     const col = Math.floor((x - this.x0) / this.tile);
-    if (col < 0 || col >= COLS || x < 0 || x >= this.width || y < PAD || y >= this.counterY) return false;
+    if (!this.counter || col < 0 || col >= this.cols || x < 0 || x >= this.width || y < PAD || y >= this.counterY) return false;
     return Math.floor((this.counterY + this.camY - y) / this.tile) === this.rows;
   }
 
@@ -178,10 +200,10 @@ export class Geometry {
   /** The tile under a pixel: back room, the counter (row -1), the stool band (row -2), or null. */
   hitTest(x: number, y: number): Spot | null {
     const col = Math.floor((x - this.x0) / this.tile);
-    if (col < 0 || col >= COLS) return null;
+    if (col < 0 || col >= this.cols) return null;
     if (x < 0 || x >= this.width) return null;
-    if (y >= this.bandY && y < this.bandY + this.band) return { row: -2, col };
-    if (y >= this.counterY && y < this.counterY + this.tile) return { row: -1, col };
+    if (this.counter && y >= this.bandY && y < this.bandY + this.band) return { row: -2, col };
+    if (this.counter && y >= this.counterY && y < this.counterY + this.tile) return { row: -1, col };
     if (y < PAD || y >= this.counterY) return null;
     const row = Math.floor((this.counterY + this.camY - y) / this.tile);
     return row >= 0 && row < this.rows ? { row, col } : null;

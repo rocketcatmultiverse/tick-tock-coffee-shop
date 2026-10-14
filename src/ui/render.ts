@@ -5,11 +5,15 @@
 // The back room is a window the camera moves over; the counter, its wooden
 // edge and the stool band (which carries the counter strip) stay pinned to
 // the bottom. A floor wider than the canvas scrolls sideways, counter and all.
+//
+// A workbench puzzle's bench (docs/QUESTIONS.md, Q77) is drawn the same way,
+// at its own width, without the counter, the stools or the row for sale. Its
+// holes are left dark, the pieces it came with are bolted down, and the tray
+// shows what it took on the tick just run.
 
-import type { Dir, Item, Roast, Structure } from '../sim/types';
+import type { Dir, Item, Layout, Roast, SimEvent, SimState, Structure } from '../sim/types';
 import { canTake, clockTick, colOf, feederSlot, isCounter, rowOf, slotOf, splitterNext, splitterOutputs, stepFrom, tileIndex } from '../sim';
 import { COLS, GROWTH } from '../sim/tuning';
-import type { Shop } from '../game/shop';
 import type { StoolResult } from '../game/strip';
 import { HAPPY_LOOPS } from '../game/tuning';
 import type { Editor, Ghost } from './editor';
@@ -37,8 +41,24 @@ export interface StoolView {
   cup: Item | null;
 }
 
+/** What the renderer draws: the shop's floor, or a workbench puzzle's bench. */
+export interface FloorModel {
+  readonly layout: Layout;
+  readonly sim: SimState;
+  /** Events of the tick just run: splashes, and what a tray took. */
+  readonly lastEvents: SimEvent[];
+}
+
+/** A bench's own marks: tiles that are not bench, the pieces it came with, and whether what a tray just took is wanted. */
+export interface BenchView {
+  holes: ReadonlySet<number>;
+  fixed: ReadonlySet<number>;
+  /** Per tray that took an item on the tick just run: whether the order wants it. */
+  took: Map<number, boolean>;
+}
+
 export interface View {
-  shop: Shop;
+  floor: FloorModel;
   editor: Editor;
   geo: Geometry;
   hover: Spot | null;
@@ -48,12 +68,14 @@ export interface View {
   panHint: string;
   /** `hover` is a finger's ghost, moved by the thumb stick, not the mouse: drawn bolder so it reads at a glance. */
   ghostCursor: boolean;
-  /** The row for sale above the floor: its words, whether rows are for sale yet or a first click awaits a second, and whether the mouse is on it. */
-  forSale: { label: string; look: 'locked' | 'open' | 'armed'; hot: boolean };
+  /** The row for sale above the floor: its words, whether rows are for sale yet or a first click awaits a second, and whether the mouse is on it. A bench has none. */
+  forSale: { label: string; look: 'locked' | 'open' | 'armed'; hot: boolean } | null;
   /** Kettle readouts: the tick its input last landed on and the roast that gave. */
   readouts: Map<number, { tick: number; roast: Roast | null }>;
   stools: StoolView[];
   cat: { spot: Spot; heart: boolean; mad: boolean } | null;
+  /** A workbench puzzle's bench; null in the shop. */
+  bench: BenchView | null;
   sprites: SpriteBank;
   /** Device pixels per CSS pixel; sprites are rasterised at this density. */
   dpr: number;
@@ -107,14 +129,14 @@ function tag(ctx: CanvasRenderingContext2D, s: string, x: number, y: number, col
 
 /** Pixel of any simulator tile index, back room or counter. */
 function indexXY(view: View, index: number): { x: number; y: number } {
-  const layout = view.shop.layout;
+  const layout = view.floor.layout;
   if (isCounter(layout, index)) return view.geo.tileXY(-1, index - layout.rows * COLS);
   return view.geo.tileXY(rowOf(index), colOf(index));
 }
 
 /** How a tile looks right now: a plot's growth, a kettle's needle, a roaster's window. */
 function lookOf(view: View, i: number, s: Structure): TileLook {
-  const sim = view.shop.sim;
+  const sim = view.floor.sim;
   if (s.kind === 'plot') {
     const p = sim.plots[i];
     if (!p) return { plotStage: 0 };
@@ -128,22 +150,23 @@ function lookOf(view: View, i: number, s: Structure): TileLook {
 }
 
 function floorSprite(view: View, rows: number): HTMLCanvasElement | null {
-  const { tile } = view.geo;
+  const { tile, cols } = view.geo;
+  const w = cols * 60;
   const grid =
-    Array.from({ length: COLS - 1 }, (_, k) => `M${(k + 1) * 60} 0V${rows * 60}`).join('') +
-    Array.from({ length: rows - 1 }, (_, k) => `M0 ${(k + 1) * 60}H720`).join('');
-  return view.sprites.get(`floor:${rows}`, Math.round(COLS * tile * view.dpr), Math.round(rows * tile * view.dpr), () => ({
-    viewBox: 720,
+    Array.from({ length: cols - 1 }, (_, k) => `M${(k + 1) * 60} 0V${rows * 60}`).join('') +
+    Array.from({ length: rows - 1 }, (_, k) => `M0 ${(k + 1) * 60}H${w}`).join('');
+  return view.sprites.get(`floor:${cols}x${rows}`, Math.round(cols * tile * view.dpr), Math.round(rows * tile * view.dpr), () => ({
+    viewBox: w,
     seed: 4,
     body:
-      `<rect x="-10" y="-10" width="740" height="${rows * 60 + 20}" fill="${PAL.floor}" stroke="none"/>` +
+      `<rect x="-10" y="-10" width="${w + 20}" height="${rows * 60 + 20}" fill="${PAL.floor}" stroke="none"/>` +
       `<path d="${grid}" stroke="${PAL.floorLine}" stroke-width="2"/>`,
   }));
 }
 
 export function draw(ctx: CanvasRenderingContext2D, view: View): void {
-  const { shop, editor, geo } = view;
-  const { layout, sim } = shop;
+  const { floor: model, editor, geo } = view;
+  const { layout, sim } = model;
   const rows = layout.rows;
   const T = geo.tile;
   const x0 = geo.x0;
@@ -156,26 +179,37 @@ export function draw(ctx: CanvasRenderingContext2D, view: View): void {
   // ---- The back room, seen through the camera's window. ----
   ctx.save();
   ctx.beginPath();
-  ctx.roundRect(x0, PAD, geo.floorW, geo.roomH, [14, 14, 0, 0]);
-  ctx.clip();
+  // The shop's back room runs down into the counter; a bench is a board of its own, rounded all round.
   const floorTop = geo.counterY - rows * T + geo.camY;
+  if (geo.counter) ctx.roundRect(x0, PAD, geo.floorW, geo.roomH, [14, 14, 0, 0]);
+  else ctx.roundRect(x0, Math.max(PAD, floorTop), geo.floorW, Math.min(geo.roomH, rows * T), 14);
+  ctx.clip();
   const floor = floorSprite(view, rows);
   if (floor) ctx.drawImage(floor, x0, floorTop, geo.floorW, rows * T);
   else {
     ctx.fillStyle = PAL.floor;
     ctx.fillRect(x0, floorTop, geo.floorW, rows * T);
   }
-  drawRowForSale(ctx, view);
+  if (view.forSale) drawRowForSale(ctx, view, view.forSale);
+  // Tiles inside the bench that are not bench.
+  for (const i of view.bench?.holes ?? []) {
+    const { x, y } = indexXY(view, i);
+    ctx.fillStyle = PAL.night;
+    ctx.fillRect(x - 0.5, y - 0.5, T + 1, T + 1);
+  }
 
   for (let row = 0; row < rows; row++) {
     const y = geo.tileXY(row, 0).y;
     if (y > geo.counterY || y + T < PAD) continue;
-    for (let col = 0; col < COLS; col++) {
+    for (let col = 0; col < geo.cols; col++) {
       const i = tileIndex(row, col);
       const s = layout.tiles[i];
       if (!s) continue;
       const x = x0 + col * T;
       blit(ctx, view, structureKey(s, lookOf(view, i, s)), x, y);
+      if (view.bench?.fixed.has(i)) drawBolts(ctx, x, y, T);
+      const took = view.bench?.took.get(i);
+      if (took !== undefined) drawTook(ctx, view, i, x, y, took);
       if (s.kind === 'feeder') tag(ctx, String(feederSlot(shown, row)), x + 2, y + 2, PAL.gold, tileFont(T));
       const roast = sim.roasting[i];
       if (s.kind === 'roaster' && roast) tag(ctx, `in ${sim.T - roast.since}`, x + 2, y + T - tileFont(T) - 5, PAL.cream, tileFont(T));
@@ -202,7 +236,28 @@ export function draw(ctx: CanvasRenderingContext2D, view: View): void {
   }
   ctx.restore();
 
-  // ---- The counter: the feeder carries on along it as one fixed belt, slot numbers riding along. ----
+  if (geo.counter) drawCounter(ctx, view);
+
+  // Splashes for this tick's spills, and for a cup that ran off the end of the counter.
+  for (const e of model.lastEvents) {
+    if (e.type !== 'spill' && e.type !== 'end') continue;
+    const { x, y } = e.type === 'end' ? geo.tileXY(-1, COLS - 1) : indexXY(view, e.at);
+    if (y + T < PAD || y > geo.counterY + (geo.counter ? T : 0)) continue;
+    blit(ctx, view, splashKey(e.item), x, y);
+  }
+
+  drawCameraHints(ctx, view);
+  drawEditing(ctx, view, editor);
+}
+
+/** The counter: the feeder carries on along it as one fixed belt, slot numbers riding along; then the stools. */
+function drawCounter(ctx: CanvasRenderingContext2D, view: View): void {
+  const { geo } = view;
+  const { layout, sim } = view.floor;
+  const T = geo.tile;
+  const x0 = geo.x0;
+  // The floor shows the tick just run, so the slots are read for that tick.
+  const shown = clockTick(sim.T - 1);
   ctx.fillStyle = PAL.track;
   ctx.fillRect(x0, geo.counterY, geo.floorW, T);
   for (let col = 0; col < COLS; col++) {
@@ -221,17 +276,43 @@ export function draw(ctx: CanvasRenderingContext2D, view: View): void {
   ctx.roundRect(x0, geo.bandY, geo.floorW, geo.band, [0, 0, 14, 14]);
   ctx.fill();
   drawStools(ctx, view);
+}
 
-  // Splashes for this tick's spills, and for a cup that ran off the end of the counter.
-  for (const e of shop.lastEvents) {
-    if (e.type !== 'spill' && e.type !== 'end') continue;
-    const { x, y } = e.type === 'end' ? geo.tileXY(-1, COLS - 1) : indexXY(view, e.at);
-    if (y + T < PAD || y > geo.counterY + T) continue;
-    blit(ctx, view, splashKey(e.item), x, y);
+/** Fixed to the bench: a brass bolt in each corner. */
+function drawBolts(ctx: CanvasRenderingContext2D, x: number, y: number, T: number): void {
+  const r = Math.max(2, T * 0.045);
+  const inset = T * 0.1;
+  ctx.save();
+  ctx.fillStyle = PAL.gold;
+  ctx.strokeStyle = PAL.ink;
+  ctx.lineWidth = 1;
+  for (const [bx, by] of [
+    [x + inset, y + inset],
+    [x + T - inset, y + inset],
+    [x + inset, y + T - inset],
+    [x + T - inset, y + T - inset],
+  ]) {
+    ctx.beginPath();
+    ctx.arc(bx, by, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
   }
+  ctx.restore();
+}
 
-  drawCameraHints(ctx, view);
-  drawEditing(ctx, view, editor);
+/** What a tray took on the tick just run, over it: ringed gold when the order wants it, red when not. */
+function drawTook(ctx: CanvasRenderingContext2D, view: View, at: number, x: number, y: number, wanted: boolean): void {
+  const T = view.geo.tile;
+  const e = view.floor.lastEvents.find((ev) => ev.type === 'deliver' && ev.at === at);
+  if (e?.type !== 'deliver') return;
+  ctx.save();
+  ctx.strokeStyle = wanted ? PAL.gold : PAL.cherry;
+  ctx.lineWidth = 3.5;
+  ctx.beginPath();
+  ctx.roundRect(x + 2, y + 2, T - 4, T - 4, 10);
+  ctx.stroke();
+  ctx.restore();
+  blit(ctx, view, itemKey(e.item), x + T * 0.15, y + T * 0.08, T * 0.7);
 }
 
 /**
@@ -239,12 +320,12 @@ export function draw(ctx: CanvasRenderingContext2D, view: View): void {
  * the price across them, brighter under the mouse and after a first click;
  * greyed until rows are for sale.
  */
-function drawRowForSale(ctx: CanvasRenderingContext2D, view: View): void {
+function drawRowForSale(ctx: CanvasRenderingContext2D, view: View, forSale: NonNullable<View['forSale']>): void {
   const { geo } = view;
   const T = geo.tile;
   const { y } = geo.tileXY(geo.rows, 0);
   if (y > geo.counterY || y + T < PAD) return;
-  const { look, hot, label } = view.forSale;
+  const { look, hot, label } = forSale;
   ctx.save();
   ctx.fillStyle = look === 'locked' ? 'rgba(46, 36, 51, 0.55)' : look === 'armed' || hot ? 'rgba(230, 180, 80, 0.26)' : 'rgba(224, 195, 154, 0.14)';
   ctx.fillRect(geo.x0, y, geo.floorW, T);
@@ -286,7 +367,7 @@ const SPLIT_SPILL = PAL.cherry;
  * when nothing beside it takes items). Read from the simulator's own rules.
  */
 function drawSplitterEdges(ctx: CanvasRenderingContext2D, view: View, i: number, x: number, y: number): void {
-  const { layout, sim } = view.shop;
+  const { layout, sim } = view.floor;
   const T = view.geo.tile;
   const outs = splitterOutputs(layout, i);
   const next = splitterNext(layout, sim, i);
@@ -317,7 +398,7 @@ function drawSplitterEdges(ctx: CanvasRenderingContext2D, view: View, i: number,
 }
 
 function drawChutes(ctx: CanvasRenderingContext2D, view: View): void {
-  const { layout } = view.shop;
+  const { layout } = view.floor;
   const T = view.geo.tile;
   for (let i = 0; i < layout.tiles.length; i++) {
     const s = layout.tiles[i];

@@ -4,7 +4,8 @@
 
 import { describe, expect, it } from 'vitest';
 import { REGULARS } from '../../src/levels/regulars';
-import { FLOOR_MARKS, drinksOrdered } from '../../src/ui/guide';
+import { BENCH_MARKS, FLOOR_MARKS, drinksOrdered } from '../../src/ui/guide';
+import { benchLines } from '../../src/ui/panel';
 import { coins, deleteHint } from '../../src/ui/tips';
 
 describe('The Guide', () => {
@@ -41,4 +42,13 @@ describe('Tooltip words for each device', () => {
     expect(coins(1)).toBe('1 coin');
     expect(coins(25)).toBe('25 coins');
   });
+
+  it('at the workbench, says no price, no refund and no row for sale (Q77)', () => {
+    expect(deleteHint(true, true)).toBe('Tap one on the floor, then Delete.');
+    expect(deleteHint(false, true)).not.toMatch(/refund/);
+    const lines = benchLines(['Buy a row: the row of tiles for sale at the top.', 'Z delete, with a full refund · X cut', 'Delete (a full refund), Cut or Copy it.']);
+    expect(lines).toEqual(['Z delete · X cut', 'Delete, Cut or Copy it.']);
+    expect(BENCH_MARKS.join(' ')).not.toMatch(/stool|slot|coin/);
+  });
 });
+

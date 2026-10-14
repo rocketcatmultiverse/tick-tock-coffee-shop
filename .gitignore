@@ -1,2 +1,4 @@
 node_modules
 dist
+# Workbench puzzle solutions: the repo is public (docs/QUESTIONS.md, Q78).
+puzzle-solutions/

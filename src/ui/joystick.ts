@@ -32,11 +32,11 @@ export function stepEvery(amount: number): number {
   return Math.round(SLOWEST_MS + (FASTEST_MS - SLOWEST_MS) * t);
 }
 
-/** The back-room tile one step from `spot` the way `dir` points, kept on a floor of `rows` rows. */
-export function stepSpot(spot: Spot, dir: Dir, rows: number): Spot {
+/** The back-room tile one step from `spot` the way `dir` points, kept on a floor of `rows` rows and `cols` columns. */
+export function stepSpot(spot: Spot, dir: Dir, rows: number, cols = COLS): Spot {
   const row = spot.row + (dir === 'N' ? 1 : dir === 'S' ? -1 : 0);
   const col = spot.col + (dir === 'E' ? 1 : dir === 'W' ? -1 : 0);
-  return { row: Math.max(0, Math.min(rows - 1, row)), col: Math.max(0, Math.min(COLS - 1, col)) };
+  return { row: Math.max(0, Math.min(rows - 1, row)), col: Math.max(0, Math.min(cols - 1, col)) };
 }
 
 export class Joystick {

@@ -26,6 +26,7 @@ const STRUCTURES: Structure[] = [
   { kind: 'bowl' },
   { kind: 'feeder' },
   { kind: 'splitter' },
+  { kind: 'tray' },
 ];
 
 const ITEMS: Item[] = [

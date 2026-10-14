@@ -805,3 +805,117 @@ the top of the map, greyed out before the first regular is happy. *Done as:*
 `src/ui/geometry.ts` (`roomRows`, `onRowForSale`), `src/ui/render.ts`
 (`drawRowForSale`), `src/ui/main.ts` (`buyRow`), `src/ui/input.ts`,
 `src/ui/panel.ts`, `src/ui/tips.ts`.
+
+**Q77. Workbench puzzles.** *Your request:* isolated puzzles, each with
+perhaps a single "solution output" tile, a map of fixed size set by the
+puzzle, items that may come pre-placed, placeable pieces that may be limited
+in number, a solution of one output or a sequence, with or without tick or
+slot requirements, and no coins spent. Some are there from the start, tiered
+from more hands-on teaching through brain teasers to mastery; they come in
+categories, each a tiered ladder, and a new category opens when a new piece is
+unlocked, said in the new regular's toast too. Time in a puzzle is time away
+from the shop, which greets you with the morning report. *Done as:*
+- *the tray:* a new fixed piece, `{ kind: 'tray' }`, written `T`. It takes one
+  item a tick from any side, as a machine takes its input: when several land
+  on one tick it takes the first by the belt priority and the rest spill. It
+  raises a `deliver` event and keeps nothing. It is in the simulator so the
+  judging and the renderer read events, as for every other rule
+  (`tests/sim/tray.test.ts`). A splitter counts it as an output. The shop's
+  palette never offers it and a shop save never holds one;
+- *the bench:* written as text like a layout, back row first, every line the
+  same width, at most the shop's 12 (`parseBoard`). `#` is a tile that is not
+  bench. Whatever stands on it comes with the puzzle and is fixed: drawn with
+  brass bolts, it cannot be moved, cut, copied, deleted or built over. The
+  simulator still sees a 12-wide floor: columns past the bench and its holes
+  are bare floor, so an item carried there spills, as at a wall, and the
+  counter row below row 0 takes nothing, since it takes only from the feeder.
+  A bench has no feeder, counter, stools, cat or row for sale, and is drawn in
+  the middle of the canvas, with bigger tiles allowed than the shop's;
+- *pieces:* each puzzle names the pieces it offers and how many of each, or
+  no limit (`limits` in `BoardRules`, checked by `planBuild`). The palette
+  shows only those, with how many are left in place of a price, and the Guide
+  lists only those. Building is free: the till is endless and no message,
+  tooltip or help line names a coin or a refund. The side door goes against
+  the bench's own right-hand wall;
+- *the order:* a list of things the tray wants every loop, each an item, of a
+  roast if it names one, on a clock tick if it names one. A loop passes when
+  the tray got exactly those things, as many as wanted and nothing else, in
+  their order read round the loop from any start, with every ticked one on its
+  tick (`judgeLoop`). Otherwise the order card says what went wrong ("A medium
+  coffee came on tick 5; the order wants it on tick 9."). *Assumed, slot
+  requirements:* a cup's slot is the tick it steps onto the counter (addendum
+  1); the tray is where a cup steps off the bench, so for a tray the slot and
+  the tick are one number, and the puzzles call it the tick;
+- *solved:* after `BENCH_SOLVE_LOOPS` (2, *proposed*) loops in a row that fill
+  the order, carrying one unbroken order from loop to loop, and only once the
+  headless simulator agrees the floor itself settles into filling it
+  (`steadyVerdict`), so items still in flight from a line just taken apart
+  cannot solve it. Solved stays solved. "Start over" clears the bench of items
+  and restarts the clock from tick 0, keeping the pieces;
+- *ladders:* the basics (belt, plot, kettle, well), open from the start, then
+  one for each piece unlocked after the start: spring, chute, roaster, side
+  door, mixer and splitter, each opening when its piece does. The mixer's and
+  the splitter's open together, with the innkeeper. A second or third well is
+  not a new piece, so it opens no ladder. *Assumed:* a ladder's rungs open in
+  order, each once the one below is solved, and a ladder still to come shows
+  as a question mark. Every ladder has a hands-on rung, a brain teaser and a
+  mastery rung: the basics 7 puzzles (five hands-on), the others 3 each, 25
+  in all (`src/levels/puzzles.ts`). A puzzle offers or comes with only pieces
+  unlocked by the time its ladder opens;
+- *fixtures:* each puzzle has a reference solution, which
+  `tests/levels/puzzles.test.ts` runs to check it keeps to its pieces and
+  solves its puzzle. It also checks that no bench solves itself as it comes,
+  and the rules above for ladders, tiers and pieces. The repo is public, so
+  the solutions are kept out of it (Q78);
+- *in the shop:* a Workbench tab lists the ladders, how many of each are
+  solved, and the rungs. When a regular's pieces open a ladder, the toast and
+  the happenings line say "New at the workbench: spring puzzles." A visit to
+  a shared shop has no workbench;
+- *time away:* opening a puzzle saves the shop and leaves it for
+  `?slot=N&bench=id`. The workbench writes only the shop's progress there:
+  puzzles solved and the pieces left on each bench (`writeBench`). The rest of
+  the save, `lastSeen` with it, stays as the shop left it, so going back
+  (`?slot=N`, which opens straight into that shop and then drops back to the
+  plain address) applies the time as time away, with the morning report. A
+  reload at the bench stays at the bench. *Assumed:* as after any load,
+  regulars earn their happiness again (Q62);
+- *the save:* an optional `bench` field, `{ solved, floors }`. Older saves
+  load with none; an export carries it;
+- *phones:* in tall and flat layouts the drawer opens on the puzzle's card and
+  its order on arrival, and the coins line says what the tray wants and the
+  loops so far ("Warm milk · 0/2 loops").
+*Not done:* no score beyond solved (pieces used, spills or loops taken), and
+solving a puzzle gives the shop nothing. `src/game/bench.ts`,
+`src/levels/puzzles.ts`, `src/ui/floorApp.ts` (what the shop and the bench
+share, taken out of `main.ts`), `src/ui/bench.ts`, `src/ui/benchList.ts`,
+`src/ui/route.ts`, `src/ui/render.ts`, `src/ui/geometry.ts`,
+`src/game/build.ts`.
+
+**Q78. Puzzles in the tour, and their solutions out of the repo.** *Your
+request:* the tour mentions the puzzles; no puzzle solution is committed,
+since the repo is public; solutions may be kept in a git-ignored place, and
+solver scripts may be committed. *Done as:*
+- *the tour:* a step, "The workbench", second to last, lights the Workbench
+  tab (the menu, in a narrow window): what the puzzles are, that the basics
+  are there from the start and each new piece opens a ladder, and that time
+  at the bench is time away, with the morning report. The tour is 8 steps
+  now, and the offer and the Help tab's line name the workbench too;
+- *the solutions:* in `puzzle-solutions/solutions.ts`, a git-ignored folder at
+  the top of the project, outside `src/` so the game cannot import it. Same
+  format as before: each puzzle's bench as text with the player's pieces
+  added, and notes on the timing of a few. It is in no commit, so keep a copy;
+- *assumed, the tests:* the deploy workflow runs `npm run verify` on a fresh
+  clone, which has no solutions. So `tests/levels/puzzles.test.ts` loads them
+  only when the folder is there (`import.meta.glob`), and otherwise skips the
+  26 solution runs, which the output counts as skipped. Every other check on
+  the puzzles still runs. With the folder present the solution runs are as
+  before, so this is no test made easier to pass;
+- *history, not yet done:* the solutions are still in two earlier commits on
+  the `puzzles` branch (the one adding the puzzles, and the workbench screen
+  after it), which has never been pushed. The branch's tip no longer has
+  them. Before the branch goes to GitHub, either those commits are rewritten
+  without the file, or the branch reaches `master` as one squashed commit and
+  is never pushed itself. Rewriting history waits for your say-so;
+- *no solver script:* the puzzles were checked by running candidate solutions
+  through the simulator, which is what the test does.
+`tests/levels/puzzles.test.ts`, `src/ui/tutorial.ts`, `.gitignore`.

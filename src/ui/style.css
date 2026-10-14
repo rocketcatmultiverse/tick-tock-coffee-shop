@@ -1976,3 +1976,156 @@ button.link {
   gap: 8px;
   margin-top: 2px;
 }
+
+/* ---- The workbench (src/ui/benchList.ts, src/ui/bench.ts; docs/QUESTIONS.md, Q77) ---- */
+
+.bench-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ladder {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ladder-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ladder-head .sprite {
+  flex: none;
+  background: var(--floor);
+  border-radius: 7px;
+}
+
+.ladder-head .card-name {
+  font-size: 20px;
+}
+
+.ladder-head .muted {
+  margin-left: auto;
+  font-size: 14px;
+}
+
+.ladder.locked .muted {
+  margin-left: 0;
+}
+
+.rungs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+button.rung {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  text-align: left;
+  padding: 4px 10px;
+}
+
+.rung-mark {
+  flex: none;
+  width: 1em;
+  color: var(--leaf);
+  font-weight: bold;
+}
+
+.rung-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.rung-tier {
+  flex: none;
+  font-size: 13px;
+}
+
+button.rung.solved {
+  border-color: var(--leaf);
+}
+
+.puzzle-card .puzzle-brief {
+  color: var(--cream);
+}
+
+.order-card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.wants {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.want {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--gold);
+}
+
+.want .sprite,
+.got .sprite {
+  flex: none;
+  background: var(--floor);
+  border-radius: 7px;
+}
+
+.got-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 28px;
+  align-items: center;
+}
+
+.got {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px 1px 2px;
+  border: 2px solid var(--gold);
+  border-radius: 9px;
+  font-size: 14px;
+}
+
+.got.bad {
+  border-color: var(--cherry);
+}
+
+.verdict.ok {
+  color: var(--leaf);
+}
+
+.verdict.bad {
+  color: #e07a62;
+}
+
+.order-card .solved {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.order-card .solved .card-name {
+  color: var(--leaf);
+}
+
+.order-card .solved[hidden] {
+  display: none;
+}

@@ -1,14 +1,15 @@
 // The card that says a regular has walked in (docs/QUESTIONS.md, Q74): their
 // portrait, what they order and where they sit, and what they bring to the
-// palette, at the top of the floor. A tap or click on it brings their stool
-// (or the cat's bowl) into view; the cross, or a few seconds, puts it away.
+// palette and the workbench (Q77), at the top of the floor. A tap or click on
+// it brings their stool (or the cat's bowl) into view; the cross, or a few
+// seconds, puts it away.
 // The seconds only count while the page is in sight, so a regular who walked
 // in while the player was away is still announced when they come back.
 
 import type { RegularDef } from '../sim/types';
 import { PIECE_LABEL } from '../game/pieces';
 import { orderName, orderWhen } from '../game/regulars';
-import type { WalkIn } from '../game/shop';
+import { type WalkIn, laddersNote } from '../game/shop';
 import { icon } from './art/icons';
 import { portraitImg } from './art/dom';
 import { el } from './el';
@@ -47,6 +48,7 @@ export class Toast {
     const brings = [
       ...(w.unlocked.length ? [`New in the palette: ${w.unlocked.map((p) => PIECE_LABEL[p]).join(', ')}.`] : []),
       ...(w.wellLimit !== null ? [`You may now own ${w.wellLimit} wells.`] : []),
+      ...(w.ladders.length ? [laddersNote(w.ladders)] : []),
     ];
     this.body.replaceChildren(
       portraitImg(def.id, 52, 'portrait'),

@@ -6,6 +6,7 @@
 //   D   side door      Rx  roaster facing x    Mx  mixer facing x
 //   B   cat's bowl     Lx  chute launch        Cx  chute catch
 //   F   feeder         Sx  spring facing x     Y   splitter
+//   T   tray
 //
 // where x is one of > < ^ v.
 
@@ -25,6 +26,7 @@ export function parseToken(token: string): Structure | null {
   if (token === 'B') return { kind: 'bowl' };
   if (token === 'F') return { kind: 'feeder' };
   if (token === 'Y') return { kind: 'splitter' };
+  if (token === 'T') return { kind: 'tray' };
   const head = token[0];
   const d = ARROW_TO_DIR[token.slice(1)];
   if (token.length === 2 && d) {
@@ -63,6 +65,8 @@ export function structureToken(s: Structure | null): string {
       return 'F';
     case 'splitter':
       return 'Y';
+    case 'tray':
+      return 'T';
     case 'spring':
       return 'S' + DIR_TO_ARROW[s.dir];
     case 'plot':

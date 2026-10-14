@@ -3,7 +3,8 @@
 // a tooltip; a locked piece is only a question mark. Locked buttons are not
 // disabled, so they still get hover, and a click says why nothing happens.
 // Arrows, or a swipe across the pieces, turn the page; picking a piece by its
-// key turns to its page.
+// key turns to its page. A workbench puzzle shows only the pieces it offers,
+// with how many are left in place of a price (docs/QUESTIONS.md, Q77).
 
 import { ALL_PIECES, PIECE_LABEL, type PieceKind } from '../game/pieces';
 import { PIECE_PRICE } from '../game/tuning';
@@ -54,10 +55,13 @@ export function pageCount(n: number, perPage: number): number {
 }
 
 export interface PaletteModel {
+  /** The pieces shown, in palette order; any other is left out. */
   palette: { piece: PieceKind; locked: boolean; note: string }[];
   inHand: PieceKind | 'group' | null;
   /** Show each piece's number key. */
   keys: boolean;
+  /** Building costs nothing here: no prices. */
+  free?: boolean;
 }
 
 interface PieceButton {
@@ -78,6 +82,8 @@ export class Palette {
   private btns = new Map<PieceKind, PieceButton>();
   private fit: PaletteFit = { perPage: ALL_PIECES.length, arrows: false };
   private page = 0;
+  /** The pieces shown, in palette order. */
+  private shown: PieceKind[] = [...ALL_PIECES];
   private held: PieceKind | 'group' | null = null;
   /** A swipe just turned the page: the click it ends in picks nothing. */
   private swiped = false;
@@ -115,9 +121,16 @@ export class Palette {
   }
 
   update(m: PaletteModel): void {
+    const shown = m.palette.map((p) => p.piece);
+    if (shown.join() !== this.shown.join()) {
+      this.shown = shown;
+      this.root.style.setProperty('--pieces', String(shown.length));
+      this.layout();
+    }
     for (const p of m.palette) {
       const { btn, label, icon: img, unknown, info, key } = this.btns.get(p.piece)!;
-      label.textContent = p.locked ? '' : `${PIECE_LABEL[p.piece]} · ${PIECE_PRICE[p.piece]}${p.note ? ' · ' + p.note : ''}`;
+      const price = m.free ? '' : ` · ${PIECE_PRICE[p.piece]}`;
+      label.textContent = p.locked ? '' : `${PIECE_LABEL[p.piece]}${price}${p.note ? ' · ' + p.note : ''}`;
       img.hidden = p.locked;
       info.hidden = p.locked;
       unknown.hidden = !p.locked;
@@ -125,7 +138,7 @@ export class Palette {
       btn.classList.toggle('locked', p.locked);
       btn.setAttribute('aria-disabled', String(p.locked));
       btn.setAttribute('aria-label', p.locked ? 'A piece not unlocked yet' : PIECE_LABEL[p.piece]);
-      btn.dataset.tip = pieceTipKey(p.piece, p.locked);
+      btn.dataset.tip = pieceTipKey(p.piece, p.locked, m.free);
       btn.classList.toggle('active', m.inHand === p.piece);
     }
     // A piece newly in hand, by its key, turns to its page.
@@ -136,7 +149,7 @@ export class Palette {
   }
 
   private pageOf(piece: PieceKind): number {
-    return Math.floor(ALL_PIECES.indexOf(piece) / this.fit.perPage);
+    return Math.floor(Math.max(0, this.shown.indexOf(piece)) / this.fit.perPage);
   }
 
   private turn(by: number): void {
@@ -144,12 +157,13 @@ export class Palette {
   }
 
   private showPage(page: number): void {
-    const pages = pageCount(ALL_PIECES.length, this.fit.perPage);
+    const pages = pageCount(this.shown.length, this.fit.perPage);
     this.page = Math.max(0, Math.min(pages - 1, page));
     const from = this.page * this.fit.perPage;
-    ALL_PIECES.forEach((p, i) => {
-      this.btns.get(p)!.btn.hidden = i < from || i >= from + this.fit.perPage;
-    });
+    for (const [piece, b] of this.btns) {
+      const i = this.shown.indexOf(piece);
+      b.btn.hidden = i < 0 || i < from || i >= from + this.fit.perPage;
+    }
     this.root.classList.toggle('paged', this.fit.arrows);
     this.prev.hidden = this.next.hidden = this.pageNote.hidden = !this.fit.arrows;
     this.prev.disabled = this.page === 0;
@@ -169,7 +183,7 @@ export class Palette {
     const w = this.root.clientWidth;
     const h = this.root.clientHeight;
     if (w === 0) return;
-    const fit = paletteFit(ALL_PIECES.length, w, h, piece, gap, arrow, fill);
+    const fit = paletteFit(this.shown.length, w, h, piece, gap, arrow, fill);
     const first = this.page * this.fit.perPage;
     this.fit = fit;
     // Keep the piece in hand in view, or else the first piece that was showing.

@@ -185,4 +185,33 @@ describe('Geometry', () => {
     g.fit(360, 600, 6, MIN_TOUCH_TILE);
     expect(g.tile).toBe(ZOOM_MIN_TILE);
   });
+
+  it('a workbench bench has its own width and no counter, stools or row for sale (Q77)', () => {
+    const g = new Geometry({ cols: 5, counter: false });
+    g.fit(W, H, 3);
+    expect(g.floorW).toBe(5 * g.tile);
+    expect(g.wood).toBe(0);
+    expect(g.band).toBe(0);
+    expect(g.roomRows).toBe(3);
+    expect(g.maxCamY).toBe(0);
+    // The bench sits in the middle of the canvas, both ways.
+    const top = g.tileXY(2, 0).y;
+    expect(Math.abs(top - PAD - (H - PAD - g.counterY))).toBeLessThanOrEqual(1);
+    expect(Math.abs(g.x0 - PAD - (W - PAD - (g.x0 + g.floorW)))).toBeLessThanOrEqual(1);
+    // Its bottom row is row 0; nothing below it or past its width is hit, and there is no strip for sale.
+    expect(g.hitTest(g.x0 + 1, g.counterY - 1)).toEqual({ row: 0, col: 0 });
+    expect(g.hitTest(g.x0 + 1, g.counterY + 1)).toBeNull();
+    expect(g.hitTest(g.x0 + g.floorW + 1, g.counterY - 1)).toBeNull();
+    expect(g.onRowForSale(g.x0 + 1, top - 1)).toBe(false);
+  });
+
+  it('a wide bench on a narrow canvas scrolls sideways like the shop', () => {
+    const g = new Geometry({ cols: 9, counter: false });
+    g.fit(300, 600, 4, MIN_TOUCH_TILE);
+    expect(g.maxCamX).toBe(9 * g.tile - (300 - 2 * PAD));
+    g.centerOn(null, 8);
+    expect(g.camX).toBe(g.maxCamX);
+    expect(g.shows(0, 8)).toBe(true);
+  });
 });
+

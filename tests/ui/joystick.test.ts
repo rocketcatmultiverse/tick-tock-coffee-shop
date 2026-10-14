@@ -39,4 +39,10 @@ describe('The thumb stick', () => {
     expect(stepSpot({ row: 2, col: 0 }, 'W', 6)).toEqual({ row: 2, col: 0 });
     expect(stepSpot({ row: 2, col: 11 }, 'E', 6)).toEqual({ row: 2, col: 11 });
   });
+
+  it('keeps the ghost on a workbench bench narrower than the shop (Q77)', () => {
+    expect(stepSpot({ row: 0, col: 3 }, 'E', 1, 5)).toEqual({ row: 0, col: 4 });
+    expect(stepSpot({ row: 0, col: 4 }, 'E', 1, 5)).toEqual({ row: 0, col: 4 });
+    expect(stepSpot({ row: 0, col: 4 }, 'N', 1, 5)).toEqual({ row: 0, col: 4 });
+  });
 });

@@ -6,7 +6,7 @@
 import type { Layout, RegularDef, Structure } from '../sim/types';
 import { COLS } from '../sim/tuning';
 import { colOf, emptyLayout, stepFrom, tileIndex } from '../sim/grid';
-import { ALL_PIECES, PIECE_LABEL, type PieceKind, pieceOf } from './pieces';
+import { ALL_PIECES, PIECE_LABEL, type PieceKind, isFixed, pieceOf } from './pieces';
 import { BOWL_COL, BOWL_ROW, PIECE_PRICE, START_PIECES, START_WELL_LIMIT } from './tuning';
 
 /** A fresh back room: the feeder down column 0 of every row and the cat's bowl in place. */
@@ -20,6 +20,44 @@ export function startLayout(rows: number): Layout {
 export interface BuildRights {
   unlocked: ReadonlySet<PieceKind>;
   wellLimit: number;
+  /** A workbench puzzle's bench, with its own rules; the shop has none. */
+  board?: BoardRules;
+}
+
+/**
+ * What a workbench puzzle's bench allows (docs/QUESTIONS.md, Q77): building
+ * only on its own tiles, around the pieces it came with, and no more of each
+ * piece than the puzzle offers. There is no feeder and no bowl to keep clear.
+ */
+export interface BoardRules {
+  /** Columns of the bench, from the left wall; tiles in later columns are not bench. */
+  cols: number;
+  /** Tiles inside those columns that are not bench either. */
+  holes: ReadonlySet<number>;
+  /** Tiles whose pieces came with the puzzle: they stay where they are. */
+  fixed: ReadonlySet<number>;
+  /** How many of each piece may be placed; a piece not named has no limit. */
+  limits: Partial<Record<PieceKind, number>>;
+}
+
+/** What may be built on and with: the shop, or a workbench puzzle. */
+export interface BuildTarget {
+  readonly layout: Layout;
+  readonly till: number;
+  /** Building costs nothing here, so nothing says what it cost. */
+  readonly free?: boolean;
+  rights(): BuildRights;
+  build(changes: readonly TileChange[]): BuildPlan;
+}
+
+/** Whether the piece on a tile stays where it is: the feeder, the bowl, a tray, or a piece a puzzle came with. */
+export function fixedAt(layout: Layout, rights: BuildRights, index: number): boolean {
+  return isFixed(layout.tiles[index] ?? null) || !!rights.board?.fixed.has(index);
+}
+
+/** Pieces of a kind on a floor that were placed, not fixed: a chute counts once, by its launch. */
+export function placedCount(layout: Layout, piece: PieceKind, fixed: ReadonlySet<number> = new Set()): number {
+  return layout.tiles.filter((s, i) => s && s.kind !== 'catch' && pieceOf(s.kind) === piece && !fixed.has(i)).length;
 }
 
 /** What you may build once the first `walkedIn` regulars have walked in. */
@@ -68,20 +106,27 @@ export function planBuild(layout: Layout, changes: readonly TileChange[], rights
   const size = layout.rows * COLS;
   const tiles = layout.tiles.slice();
   const before: (Structure | null)[] = [];
+  const board = rights.board;
   let cost = 0;
   for (const ch of changes) {
     if (ch.index < 0 || ch.index >= size) return { ok: false, reason: 'Off the floor' };
     const was = tiles[ch.index];
     before.push(was);
     if (same(was, ch.to)) continue;
-    if (was?.kind === 'bowl' || ch.to?.kind === 'bowl') return { ok: false, reason: "The cat's bowl is fixed" };
-    if (was?.kind === 'feeder' || ch.to?.kind === 'feeder' || colOf(ch.index) === 0) {
-      return { ok: false, reason: 'The feeder is fixed' };
+    if (board) {
+      if (colOf(ch.index) >= board.cols || board.holes.has(ch.index)) return { ok: false, reason: 'Off the bench' };
+      if (board.fixed.has(ch.index)) return { ok: false, reason: was?.kind === 'tray' ? 'The tray is fixed' : 'Fixed to the bench' };
+    } else {
+      if (was?.kind === 'bowl' || ch.to?.kind === 'bowl') return { ok: false, reason: "The cat's bowl is fixed" };
+      if (was?.kind === 'feeder' || ch.to?.kind === 'feeder' || colOf(ch.index) === 0) {
+        return { ok: false, reason: 'The feeder is fixed' };
+      }
     }
     if (ch.to) {
       const piece = pieceOf(ch.to.kind);
-      if (!piece || !rights.unlocked.has(piece)) return { ok: false, reason: `${piece ? PIECE_LABEL[piece] : ch.to.kind} is locked` };
-      if (ch.to.kind === 'door' && colOf(ch.index) !== COLS - 1) {
+      const name = piece ? PIECE_LABEL[piece] : ch.to.kind;
+      if (!piece || !rights.unlocked.has(piece)) return { ok: false, reason: board ? `${name} is not in this puzzle` : `${name} is locked` };
+      if (ch.to.kind === 'door' && colOf(ch.index) !== (board?.cols ?? COLS) - 1) {
         return { ok: false, reason: 'The side door goes against the right-hand wall' };
       }
     }
@@ -94,6 +139,14 @@ export function planBuild(layout: Layout, changes: readonly TileChange[], rights
   const wellsBefore = layout.tiles.filter((s) => s?.kind === 'well').length;
   if (wells > rights.wellLimit && wells > wellsBefore) {
     return { ok: false, reason: `Well limit reached (${rights.wellLimit})` };
+  }
+  // A puzzle's limits: more than it offers is refused, though a floor already over keeps what it has.
+  for (const [piece, limit] of Object.entries(board?.limits ?? {}) as [PieceKind, number][]) {
+    const n = placedCount(next, piece, board!.fixed);
+    if (n > limit && n > placedCount(layout, piece, board!.fixed)) {
+      const name = PIECE_LABEL[piece].toLowerCase();
+      return { ok: false, reason: limit === 0 ? `No ${name} in this puzzle` : `Only ${limit} ${name}${limit === 1 ? '' : 's'} in this puzzle` };
+    }
   }
   if (tiles.filter((s) => s?.kind === 'door').length > 1) return { ok: false, reason: 'There is only one side door' };
   const broken = brokenChute(next);

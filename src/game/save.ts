@@ -5,6 +5,7 @@
 import type { Dir, Layout, RegularDef, Structure } from '../sim/types';
 import { tileIndex } from '../sim/grid';
 import { COLS } from '../sim/tuning';
+import type { BenchProgress } from './bench';
 import type { RegularState } from './regulars';
 import { Shop } from './shop';
 import { BOWL_COL, BOWL_ROW, START_ROWS } from './tuning';
@@ -16,6 +17,7 @@ export interface Save {
   catName: string; // chosen by the player
   shopName?: string; // chosen by the player, for share links; older saves have none
   tutorialSeen?: boolean; // the tour was offered; older saves have none, so it is offered to them
+  bench?: BenchProgress; // workbench puzzles solved and the pieces on each bench; older saves have none
   gears: number; // paid by the clockmaker; buys nothing
   regulars: RegularState[];
   lastSeen: number; // epoch ms, read only by the game layer
@@ -29,6 +31,7 @@ export function saveShop(shop: Shop, now: number): Save {
     catName: shop.catName,
     shopName: shop.shopName,
     tutorialSeen: shop.tutorialSeen,
+    bench: structuredClone(shop.bench),
     gears: shop.gears,
     regulars: shop.regulars.map((r) => ({ ...r })),
     lastSeen: now,
@@ -100,6 +103,17 @@ function isStructure(s: unknown): s is Structure {
 
 const isCount = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0;
 
+/** Puzzles solved by id, and each bench's pieces by tile. A tray is never placed, so a save never holds one. */
+export function isBenchProgress(b: unknown): b is BenchProgress {
+  if (b === null || typeof b !== 'object') return false;
+  const o = b as Record<string, unknown>;
+  if (!Array.isArray(o.solved) || !o.solved.every((id) => typeof id === 'string')) return false;
+  if (o.floors === null || typeof o.floors !== 'object' || Array.isArray(o.floors)) return false;
+  return Object.values(o.floors).every(
+    (tiles) => Array.isArray(tiles) && tiles.every((t) => Array.isArray(t) && t.length === 2 && Number.isInteger(t[0]) && t[0] >= 0 && isStructure(t[1])),
+  );
+}
+
 function isSave(data: unknown, defs: readonly RegularDef[]): data is Save {
   if (data === null || typeof data !== 'object') return false;
   const d = data as Record<string, unknown>;
@@ -115,6 +129,7 @@ function isSave(data: unknown, defs: readonly RegularDef[]): data is Save {
   if (!isCount(d.gears) || typeof d.catName !== 'string' || typeof d.lastSeen !== 'number') return false;
   if (d.shopName !== undefined && typeof d.shopName !== 'string') return false;
   if (d.tutorialSeen !== undefined && typeof d.tutorialSeen !== 'boolean') return false;
+  if (d.bench !== undefined && !isBenchProgress(d.bench)) return false;
   const regs = d.regulars;
   if (!Array.isArray(regs) || regs.length > defs.length || (defs.length > 0 && regs.length === 0)) return false;
   return regs.every(

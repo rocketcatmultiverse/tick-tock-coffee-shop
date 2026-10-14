@@ -3,6 +3,8 @@ import { Shop } from '../../src/game/shop';
 import { START_COINS } from '../../src/game/tuning';
 import { tileIndex } from '../../src/sim/grid';
 import { layoutToText } from '../../src/sim/text';
+import { Workbench } from '../../src/game/bench';
+import type { PuzzleDef } from '../../src/sim/types';
 import { Editor } from '../../src/ui/editor';
 
 function setup(debug = false) {
@@ -189,3 +191,66 @@ describe('Editor', () => {
     expect(shop.layout.tiles[tileIndex(1, 3)]).toBeNull();
   });
 });
+
+describe('Editor on a workbench (Q77)', () => {
+  const def: PuzzleDef = {
+    id: 'test',
+    name: 'Test',
+    ladder: 'basics',
+    tier: 'tutorial',
+    brief: '',
+    board: ['. . . . .', 'W . . . T', '. . . . .'],
+    pieces: { belt: 2, plot: null },
+    wants: [{ kind: 'water' }],
+  };
+
+  it('builds for nothing, and says no price', () => {
+    const bench = new Workbench(def);
+    const ed = new Editor(bench);
+    ed.pick('plot');
+    ed.press(2, 2);
+    expect(ed.message).toBe('Placed plot');
+    ed.putDown();
+    ed.deleteKey(2, 2);
+    expect(ed.message).toBe('Deleted 1 piece');
+    ed.pickUpBuffer();
+    ed.press(0, 2);
+    expect(ed.message).toBe('Pasted 1 piece');
+  });
+
+  it('cannot cut, copy or delete what the bench came with', () => {
+    const bench = new Workbench(def);
+    const ed = new Editor(bench);
+    ed.deleteKey(1, 0);
+    expect(ed.message).toBe('Nothing there');
+    ed.cut('hover', 1, 4);
+    expect(ed.hand).toBeNull();
+    ed.copy('hover', 1, 0);
+    expect(ed.message).toBe('Nothing to copy');
+    // A box over the whole bench takes only what was placed.
+    ed.pick('belt');
+    ed.press(1, 1);
+    ed.release();
+    ed.putDown();
+    ed.beginSelect(0, 0);
+    ed.selectTo(2, 4);
+    ed.endSelect();
+    ed.copy('box');
+    expect(ed.message).toBe('Copied 1 piece');
+  });
+
+  it('offers only the puzzle’s own pieces, and says when one has run out', () => {
+    const bench = new Workbench(def);
+    const ed = new Editor(bench);
+    ed.pick('kettle');
+    expect(ed.hand).toBeNull();
+    expect(ed.message).toBe('Not in this puzzle');
+    ed.pick('belt');
+    ed.press(0, 1);
+    ed.dragTo(0, 3);
+    ed.release();
+    expect(bench.left('belt')).toBe(0);
+    expect(ed.ghost(2, 2)?.reason).toBe('Only 2 belts in this puzzle');
+  });
+});
+

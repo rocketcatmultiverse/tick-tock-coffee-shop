@@ -63,6 +63,15 @@ describe('The tour', () => {
     expect(go({ touch: true, menu: true })).toContain('The Help tab, in the menu, has every control');
   });
 
+  it('mentions the workbench puzzles, and finds their tab in the menu when the tabs are in the drawer (Q77)', () => {
+    const bench = (words: { touch: boolean; menu: boolean }) => all(tourText(STOOL, words).find((s) => s.id === 'bench')!).join(' ');
+    expect(steps.map((s) => s.id).indexOf('bench')).toBe(steps.length - 2);
+    expect(bench({ touch: false, menu: false })).toContain('The Workbench tab has puzzles');
+    expect(bench({ touch: true, menu: true })).toContain('The Workbench tab, in the menu, has puzzles');
+    expect(bench({ touch: false, menu: false })).toMatch(/each new piece a regular brings opens a ladder/);
+    expect(bench({ touch: false, menu: false })).toMatch(/morning report/);
+  });
+
   it('says deleting gives every coin back, and that rows do not', () => {
     const coins = steps.find((s) => s.id === 'coins')!.lines.join(' ');
     expect(coins).toContain(`${START_COINS} coins`);

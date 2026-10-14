@@ -4,9 +4,13 @@
 // unasked: its slot says so, and it can be exported or deleted.
 
 import type { RegularDef } from '../sim/types';
+import type { BenchProgress } from '../game/bench';
 import { type Save, asSave, loadShop, saveShop } from '../game/save';
 import type { Shop } from '../game/shop';
 import { SAVE_SLOTS } from '../game/tuning';
+
+/** How often a shop, or a workbench's progress, is saved while open, in milliseconds. */
+export const AUTOSAVE_MS = 2000;
 
 const prefix = (debug: boolean) => (debug ? 'ticktock.debug' : 'ticktock');
 /** The one save from before there were slots. */
@@ -100,6 +104,17 @@ export function writeSave(shop: Shop, slot: number): void {
   // Someone else's shop, opened from a share link, is never saved: it would overwrite the player's own.
   if (shop.visiting) return;
   writeSlot(shop.debug, slot, saveShop(shop, Date.now()));
+}
+
+/**
+ * Keep a shop's workbench progress in its slot, and nothing else: the rest of
+ * the save, its lastSeen with it, stays as the shop left it, so time at the
+ * bench counts as time away (docs/QUESTIONS.md, Q77). Returns whether it was kept.
+ */
+export function writeBench(defs: readonly RegularDef[], debug: boolean, slot: number, bench: BenchProgress): boolean {
+  const state = readSlot(defs, debug, slot);
+  if (state.kind !== 'save') return false;
+  return writeSlot(debug, slot, { ...state.save, bench: structuredClone(bench) });
 }
 
 export function clearSlot(debug: boolean, slot: number): void {

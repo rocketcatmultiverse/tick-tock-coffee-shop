@@ -3,7 +3,7 @@
 // how the drink is made, as pictures: inputs + machine = drink. Every number
 // comes from the tuning files, so the words follow the rules if they change.
 
-import type { Drink, Item, Roast } from '../sim/types';
+import type { Item, Roast } from '../sim/types';
 import { itemName } from '../sim/items';
 import {
   BREW_TIME,
@@ -167,21 +167,26 @@ const keyNote = (piece: PieceKind) => {
   return k && !touchFirst() ? ` · key ${k}` : '';
 };
 
-/** How to delete a piece on the floor, in the words for this device. */
-export const deleteHint = (touch: boolean) =>
-  touch ? 'Tap one on the floor, then Delete, for a full refund.' : 'Hover one on the floor and press Z to delete it, for a full refund.';
+/** How to delete a piece on the floor, in the words for this device; on a workbench there are no coins to get back. */
+export const deleteHint = (touch: boolean, free = false) => {
+  const refund = free ? '' : ', for a full refund';
+  return touch ? `Tap one on the floor, then Delete${refund}.` : `Hover one on the floor and press Z to delete it${refund}.`;
+};
 
 /** A piece's tooltip under its name: what it makes, its rules, and how to get its coins back. */
-export function pieceBody(piece: PieceKind): HTMLElement[] {
+export function pieceBody(piece: PieceKind, free = false): HTMLElement[] {
   return [
     ...(PIECE_MAKES[piece] ?? []).map((s) => equation(s, 30)),
     el('ul', { className: 'tip-rules' }, ...PIECE_RULES[piece].map((line) => el('li', {}, line))),
-    el('div', { className: 'tip-foot' }, deleteHint(touchFirst())),
+    el('div', { className: 'tip-foot' }, deleteHint(touchFirst(), free)),
   ];
 }
 
-function pieceTip(piece: PieceKind): HTMLElement {
-  return el('div', {}, header(PIECE_LABEL[piece], `${coins(PIECE_PRICE[piece])}${keyNote(piece)}`), ...pieceBody(piece));
+/** A piece's tooltip: its name, its price (none at a workbench), its key and its rules. */
+function pieceTip(piece: PieceKind, free: boolean): HTMLElement {
+  const key = keyNote(piece);
+  const aside = free ? key.replace(/^ · /, '') : `${coins(PIECE_PRICE[piece])}${key}`;
+  return el('div', {}, header(PIECE_LABEL[piece], aside), ...pieceBody(piece, free));
 }
 
 /** What a floor row is: never refunded, and for sale only once a regular is happy. */
@@ -238,16 +243,16 @@ function toolTip(id: ToolId): HTMLElement {
 }
 
 /** The data-tip key for an order, and for a palette piece. A tool's is `tool:<id>`. */
-export const orderTipKey = (drink: Drink, roast: Roast | 'any') => `order:${drink}:${roast}`;
-export const pieceTipKey = (piece: PieceKind, locked: boolean) => `${locked ? 'locked' : 'piece'}:${piece}`;
+export const orderTipKey = (kind: Item['kind'], roast: Roast | 'any') => `order:${kind}:${roast}`;
+export const pieceTipKey = (piece: PieceKind, locked: boolean, free = false) => `${locked ? 'locked' : 'piece'}:${piece}${free ? ':free' : ''}`;
 
 /** The body of the tooltip a data-tip key names, or null if it names none. */
 export function tipContent(key: string): HTMLElement | null {
   const [kind, a, b] = key.split(':');
   if ((kind === 'piece' || kind === 'locked') && (ALL_PIECES as readonly string[]).includes(a)) {
-    return kind === 'piece' ? pieceTip(a as PieceKind) : lockedTip(a as PieceKind);
+    return kind === 'piece' ? pieceTip(a as PieceKind, b === 'free') : lockedTip(a as PieceKind);
   }
-  if (kind === 'order') return orderTip({ kind: a as Drink, roast: b === 'any' ? null : (b as Roast) });
+  if (kind === 'order') return orderTip({ kind: a as Item['kind'], roast: b === 'any' ? null : (b as Roast) });
   if (kind === 'tool' && a in TOOLS) return toolTip(a as ToolId);
   return null;
 }

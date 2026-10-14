@@ -24,6 +24,8 @@ export interface PanelModel {
   message: string;
   hoverInfo: string;
   bufferInfo: string;
+  /** What the narrow layouts' coins line says instead of the coins, as at the workbench. */
+  coinsText?: string;
 }
 
 export interface PanelActions {
@@ -123,7 +125,7 @@ export class Panel {
     this.stepBtn.disabled = m.running;
     this.speed.value = String(m.speed);
     this.till.textContent = `${m.till.toLocaleString()} coins`;
-    this.coins.textContent = `${m.till.toLocaleString()} coins`;
+    this.coins.textContent = m.coinsText ?? `${m.till.toLocaleString()} coins`;
     this.gears.textContent = `· ${m.gears.toLocaleString()} gear${m.gears === 1 ? '' : 's'}`;
     this.seated.textContent = m.seated;
     this.spills.textContent = `Spills: ${m.spillsThisLoop} this loop, ${m.spillsLastLoop} last loop`;
@@ -215,17 +217,41 @@ const MARKS = [
   'A stool reads t9 · s9: its regular wants a cup on tick 9, which is the cup in slot 9. ● Just in Time, ◐ served, ✕ a miss.',
 ];
 
-/** The tour, the controls for this device first, and credits for the fonts. */
-export function helpPane(startTour: () => void, touch: boolean): HTMLElement[] {
-  const tour = el('button', { className: 'primary', textContent: 'Take the tour' });
-  tour.onclick = startTour;
+/** At the workbench: what is different there (docs/QUESTIONS.md, Q77). */
+const BENCH = [
+  'Every piece is free here, and the bench is the size it is: there are no rows to buy.',
+  'Pieces with brass bolts came with the bench and stay put. The palette says how many of each piece are left.',
+  'The tray wants the same things every loop. Fill its order on loops in a row and the puzzle is solved.',
+  'Start over clears the floor of items and starts the clock again from tick 0, keeping your pieces.',
+];
+
+/** The controls as said at the workbench: no row for sale, and no coins to get back. */
+export function benchLines(lines: readonly string[]): string[] {
+  return lines.filter((t) => !t.includes('for sale')).map((t) => t.replace(', with a full refund', '').replace(' (a full refund)', ''));
+}
+
+/**
+ * The tour, the controls for this device first, and credits for the fonts. At
+ * the workbench (no tour to take) a note on the bench comes first instead, and
+ * the controls leave out the shop's rows and refunds.
+ */
+export function helpPane(startTour: (() => void) | null, touch: boolean): HTMLElement[] {
   const list = (lines: string[]) => el('ul', { className: 'keys' }, ...lines.map((t) => el('li', {}, t)));
-  const [first, firstName, other, otherName] = touch ? [TOUCH, 'Touch', KEYS, 'Mouse and keys'] : [KEYS, 'Mouse and keys', TOUCH, 'Touch'];
+  const keys = startTour ? KEYS : benchLines(KEYS);
+  const fingers = startTour ? TOUCH : benchLines(TOUCH);
+  const [first, firstName, other, otherName] = touch ? [fingers, 'Touch', keys, 'Mouse and keys'] : [keys, 'Mouse and keys', fingers, 'Touch'];
+  let lead: HTMLElement;
+  if (startTour) {
+    const tour = el('button', { className: 'primary', textContent: 'Take the tour' });
+    tour.onclick = startTour;
+    lead = el('div', { className: 'help-tour' }, tour, el('span', { className: 'muted' }, 'A few short steps: the clock, slots, your first four pieces and the workbench.'));
+  } else lead = list(BENCH);
   return [
-    el('div', { className: 'help-tour' }, tour, el('span', { className: 'muted' }, 'A few short steps: the clock, slots and your first four pieces.')),
+    lead,
     el('h3', { className: 'help-head' }, firstName),
     list(first),
-    list(MARKS),
+    // The stools and slots are the shop's; the Guide tab reads the bench's own marks.
+    ...(startTour ? [list(MARKS)] : []),
     el('details', {}, el('summary', {}, otherName), list(other)),
     el(
       'p',

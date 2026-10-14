@@ -11,6 +11,12 @@ export const START_COINS = 80;
  */
 export const HAPPY_LOOPS = 3;
 
+/**
+ * Loops in a row that fill a workbench tray's order before the puzzle is
+ * solved, once the headless simulator agrees (proposed, docs/QUESTIONS.md, Q77).
+ */
+export const BENCH_SOLVE_LOOPS = 2;
+
 /** An any-tick regular counts as waiting once this many ticks pass without a cup (proposed). */
 export const ANY_TICK_WAITING = 24;
 export const START_ROWS = 6;

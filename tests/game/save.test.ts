@@ -45,14 +45,26 @@ describe('Save and load', () => {
     expect(loadShop(JSON.parse(JSON.stringify(saveShop(shop, 0))), REGULARS, true)!.shop.tutorialSeen).toBe(true);
   });
 
+  it('keeps the workbench puzzles solved and the pieces left on each bench (Q77)', () => {
+    const shop = playedShop();
+    shop.bench = { solved: ['basics-1'], floors: { 'basics-2': [[13, { kind: 'belt', dir: 'E' }], [14, { kind: 'launch', dir: 'N' }]] } };
+    const back = loadShop(JSON.parse(JSON.stringify(saveShop(shop, 0))), REGULARS, true)!.shop;
+    expect(back.bench).toEqual(shop.bench);
+    // A save's bench that is not one is refused, as any other bad field is.
+    expect(loadShop({ ...saveShop(shop, 0), bench: { solved: 'basics-1', floors: {} } }, REGULARS, true)).toBeNull();
+    expect(loadShop({ ...saveShop(shop, 0), bench: { solved: [], floors: { x: [[1, { kind: 'teapot' }]] } } }, REGULARS, true)).toBeNull();
+  });
+
   it('loads an older save without the newer fields, and offers it the tour', () => {
     const save: Record<string, unknown> = { ...saveShop(playedShop(), 0) };
     delete save.tutorialSeen;
     delete save.shopName;
+    delete save.bench;
     const back = loadShop(save, REGULARS, true);
     expect(back).not.toBeNull();
     expect(back!.shop.tutorialSeen).toBe(false);
     expect(back!.shop.shopName).toBe('');
+    expect(back!.shop.bench).toEqual({ solved: [], floors: {} });
   });
 
   it('refuses a save it does not understand', () => {

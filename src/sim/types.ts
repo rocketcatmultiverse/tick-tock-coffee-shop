@@ -29,7 +29,8 @@ export type Structure =
   | { kind: 'door' } // the side door: column 11 only, faces left, at most one
   | { kind: 'feeder' } // column 0 only, pre-placed in every row, flows toward the counter, cannot be removed
   | { kind: 'spring'; dir: Dir } // an item crosses it in SPRING_TICKS ticks instead of 1
-  | { kind: 'splitter' }; // hands each item to the next of its outputs, clockwise from the top
+  | { kind: 'splitter' } // hands each item to the next of its outputs, clockwise from the top
+  | { kind: 'tray' }; // a workbench puzzle's way out: takes one item a tick from any side (docs/QUESTIONS.md, Q77)
 
 export type StructureKind = Structure['kind'];
 
@@ -79,7 +80,49 @@ export type SimEvent =
   | { type: 'serve'; seat: number; at: number; item: Item; justInTime: boolean }
   | { type: 'refuse'; seat: number; at: number; item: Item } // a fussy regular turned down the right cup
   | { type: 'bolt'; seat: number; at: number } // plain milk scared the cat off the bowl
+  | { type: 'deliver'; at: number; item: Item } // a tray took an item
   | { type: 'end'; item: Item }; // a drink ran off the end of the counter untaken; the game counts it as a spill
+
+/**
+ * What the palette sells. A chute is one piece covering a launch and a catch.
+ * Lives here so that `src/levels/` can name pieces; `src/game/pieces.ts` has the rest.
+ */
+export type PieceKind = 'belt' | 'plot' | 'kettle' | 'well' | 'spring' | 'chute' | 'roaster' | 'door' | 'mixer' | 'splitter';
+
+/** One thing a workbench tray wants every loop: an item, of a roast if it names one, on a tick if it names one. */
+export interface TrayWant {
+  kind: Item['kind'];
+  roast?: Roast; // any roast when left out
+  tick?: number; // the clock tick it must land in the tray on; any tick when left out
+}
+
+/**
+ * A workbench puzzle (docs/QUESTIONS.md, Q77): a fixed bench, some pieces
+ * already on it, a few to place, and a tray that wants the same things every
+ * loop. Lives here so that `src/levels/` can import it as a type.
+ */
+export interface PuzzleDef {
+  id: string;
+  name: string;
+  /** The ladder it is on: the piece whose unlocking opens it, or the basics, open from the start. */
+  ladder: PieceKind | 'basics';
+  /** Hands-on teaching, a brain teaser, or mastery. */
+  tier: 'tutorial' | 'teaser' | 'mastery';
+  /** A line or two that sets the puzzle. */
+  brief: string;
+  /**
+   * The bench, back row first, one token a tile as in src/sim/text.ts, every
+   * line the same width (at most 12). T is the tray and # a tile that is not
+   * bench. Whatever stands on it is fixed.
+   */
+  board: string[];
+  /** What the player may place, and how many of each: null for as many as they like. */
+  pieces: Partial<Record<PieceKind, number | null>>;
+  /** What the tray wants every loop, in order. */
+  wants: TrayWant[];
+  /** Pails the side door brings each loop, one a tick from MILK_TICK. None when left out. */
+  milkPails?: number;
+}
 
 /** A regular's definition. Lives here so that `src/levels/` can import it as a type. */
 export interface RegularDef {

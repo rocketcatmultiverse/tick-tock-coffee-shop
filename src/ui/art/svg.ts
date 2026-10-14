@@ -243,6 +243,16 @@ export function bowl(): string {
   );
 }
 
+/** The tray a workbench puzzle's items are handed in on: wood with a gold rim, a napkin, and a bell to ring. */
+export function tray(): string {
+  return (
+    `<rect x="3" y="9" width="54" height="42" rx="9" fill="${PAL.wood}" stroke="${PAL.gold}" stroke-width="3"/>` +
+    `<rect x="11" y="16" width="38" height="28" rx="5" fill="${PAL.shelfWood}"/>` +
+    `<path d="M15 20l14 4-3 14-12-6z" fill="${PAL.cup}"/>` +
+    `<path d="M33 37a9 9 0 0 1 18 0z" fill="${PAL.gold}"/><path d="M31 38h22" stroke-width="3"/><circle cx="42" cy="26" r="2.5" fill="${PAL.gold}"/>`
+  );
+}
+
 /** Your cat, sitting. Not on the canvas; drawn in its style. */
 export function cat(): string {
   return (
@@ -375,6 +385,7 @@ export function structureKey(s: Structure, look: TileLook = {}): string {
     case 'door':
     case 'bowl':
     case 'splitter':
+    case 'tray':
       return s.kind;
   }
 }
@@ -410,6 +421,8 @@ export function spriteBody(key: string): string {
       return bowl();
     case 'splitter':
       return splitter();
+    case 'tray':
+      return tray();
     case 'cat':
       return cat();
     case 'item':

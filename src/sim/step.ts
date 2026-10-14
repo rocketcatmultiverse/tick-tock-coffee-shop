@@ -254,6 +254,11 @@ export function step(layout: Layout, state: SimState, opts: StepOpts): { next: S
         }
         return;
       }
+      case 'tray':
+        // One item a tick, by the belt priority; the rest spill.
+        events.push({ type: 'deliver', at, item: list[0].item });
+        for (const a of list.slice(1)) spill(at, a.item);
+        return;
       default:
         // Wells and doors take nothing.
         for (const a of list) spill(at, a.item);
@@ -341,6 +346,7 @@ export function splitterOutputs(layout: Layout, at: number): Dir[] {
       case 'mixer':
         return n.out !== back;
       case 'bowl':
+      case 'tray':
         return true;
       case 'well':
       case 'door':
@@ -364,10 +370,10 @@ export function splitterNext(layout: Layout, state: SimState, at: number): Dir |
 }
 
 /**
- * Whether a tile can ever take `item`: anything belt-shaped takes anything; a
- * machine takes only what it can use (a mixer still spills a lone ingredient,
- * and the bowl warm milk when the cat is away); bare floor, wells and the side
- * door take nothing.
+ * Whether a tile can ever take `item`: anything belt-shaped, and the tray,
+ * takes anything; a machine takes only what it can use (a mixer still spills
+ * a lone ingredient, and the bowl warm milk when the cat is away); bare floor,
+ * wells and the side door take nothing.
  */
 export function canTake(s: Structure | null, item: Item): boolean {
   if (!s) return false;
@@ -378,6 +384,7 @@ export function canTake(s: Structure | null, item: Item): boolean {
     case 'feeder':
     case 'spring':
     case 'splitter':
+    case 'tray':
       return true;
     case 'plot':
       return item.kind === 'water';

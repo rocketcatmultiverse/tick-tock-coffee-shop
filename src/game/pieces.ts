@@ -1,17 +1,7 @@
-import type { Structure, StructureKind } from '../sim/types';
+import type { PieceKind, Structure, StructureKind } from '../sim/types';
 
 /** What the palette sells. A chute is one piece covering a launch and a catch. */
-export type PieceKind =
-  | 'belt'
-  | 'plot'
-  | 'kettle'
-  | 'well'
-  | 'spring'
-  | 'chute'
-  | 'roaster'
-  | 'door'
-  | 'mixer'
-  | 'splitter';
+export type { PieceKind };
 
 export const ALL_PIECES: readonly PieceKind[] = [
   'belt',
@@ -39,7 +29,7 @@ export const PIECE_LABEL: Record<PieceKind, string> = {
   splitter: 'Splitter',
 };
 
-/** The palette piece a structure belongs to; null for the fixed bowl and feeder. */
+/** The palette piece a structure belongs to; null for the fixed bowl, feeder and tray. */
 export function pieceOf(kind: StructureKind): PieceKind | null {
   switch (kind) {
     case 'launch':
@@ -47,6 +37,7 @@ export function pieceOf(kind: StructureKind): PieceKind | null {
       return 'chute';
     case 'bowl':
     case 'feeder':
+    case 'tray':
       return null;
     default:
       return kind;
@@ -55,5 +46,5 @@ export function pieceOf(kind: StructureKind): PieceKind | null {
 
 /** Pieces that cannot be selected, cut or deleted. */
 export function isFixed(s: Structure | null): boolean {
-  return !!s && (s.kind === 'bowl' || s.kind === 'feeder');
+  return !!s && (s.kind === 'bowl' || s.kind === 'feeder' || s.kind === 'tray');
 }

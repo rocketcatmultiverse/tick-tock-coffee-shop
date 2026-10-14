@@ -1,5 +1,6 @@
 // The tour: a few short steps that point at the clock, the newest regular,
-// the first four pieces, the feeder, the slots, the till and the Help tab.
+// the first four pieces, the feeder, the slots, the till, the workbench
+// puzzles (docs/QUESTIONS.md, Q77) and the Help tab.
 // It is offered once per shop, can be skipped at any step, and can be taken
 // again from the Help tab. The floor keeps running and stays clickable
 // underneath. Every number in the words comes from the tuning files. On a
@@ -26,7 +27,7 @@ export interface StoolExample {
   slot: number;
 }
 
-export type TourStepId = 'clock' | 'regular' | 'pieces' | 'feeder' | 'slots' | 'coins' | 'go';
+export type TourStepId = 'clock' | 'regular' | 'pieces' | 'feeder' | 'slots' | 'coins' | 'bench' | 'go';
 
 /** How the player plays: by touch or with a mouse and keys, and whether the tabs are in the menu. */
 export interface TourWords {
@@ -64,6 +65,7 @@ export function tourText(stool: StoolExample, words: TourWords = { touch: false,
   const key = (p: PieceKind) => pieceKey(ALL_PIECES.indexOf(p));
   const { touch, menu } = words;
   const help = menu ? 'The Help tab, in the menu, has' : 'The Help tab has';
+  const bench = menu ? 'The Workbench tab, in the menu, has' : 'The Workbench tab has';
   return [
     {
       id: 'clock',
@@ -123,6 +125,15 @@ export function tourText(stool: StoolExample, words: TourWords = { touch: false,
       ],
     },
     {
+      id: 'bench',
+      title: 'The workbench',
+      lines: [
+        `${bench} puzzles on a bench of their own: get the right things into the tray, loop after loop. Building there costs nothing.`,
+        'The basics are there from the start, and each new piece a regular brings opens a ladder of puzzles for it, from hands-on to mastery.',
+        'Your regulars carry on while you are at the bench, and the shop greets you with the morning report when you come back.',
+      ],
+    },
+    {
       id: 'go',
       title: 'Your turn',
       lines: [
@@ -153,6 +164,8 @@ export interface TourTargets {
   till(): HTMLElement;
   /** Where the Help tab is: its button, or the menu that opens it. */
   help(): HTMLElement;
+  /** Where the Workbench tab is: its button, or the menu that opens it. */
+  bench(): HTMLElement;
   /** The feeder column, or the counter with its stools, on the floor canvas. */
   floor(part: 'feeder' | 'counter'): Box | null;
   /** Get the page ready for a step, such as opening the menu that holds its target; null when the tour ends. */
@@ -182,6 +195,7 @@ function steps(t: TourTargets, stool: StoolExample, words: TourWords): TourStep[
     feeder: { target: () => t.floor('feeder'), side: 'right' },
     slots: { target: () => t.floor('counter'), side: 'above' },
     coins: { target: () => boxOf(t.till()), side: 'above' },
+    bench: { target: () => boxOf(t.bench()), side: 'left' },
     go: { target: () => boxOf(t.help()), side: 'left' },
   };
   return tourText(stool, words).map((text) => ({ text, ...at[text.id] }));
@@ -313,7 +327,7 @@ export function offerTour(stepCount: number, choose: { take(): void; skip(): voi
     el(
       'p',
       {},
-      `New here? A short tour shows how the shop works in ${stepCount} quick steps: the clock, slots, and your first four pieces. The floor keeps running while you read.`,
+      `New here? A short tour shows how the shop works in ${stepCount} quick steps: the clock, slots, your first four pieces and the workbench puzzles. The floor keeps running while you read.`,
     ),
     el('p', { className: 'muted' }, `You can take it again any time from the Help tab${menu ? ', in the menu' : ''}.`),
     el('div', { className: 'row' }, skip, take),

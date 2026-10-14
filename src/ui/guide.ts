@@ -3,6 +3,8 @@
 // Q71). Each piece unlocked so far, each drink a regular here orders, floor
 // rows, and what the marks on the floor mean. Pieces still to come stay a
 // question mark, and drinks nobody has ordered yet are left out: no spoilers.
+// At a workbench puzzle (Q77) it lists the puzzle's own pieces and what its
+// tray wants, and the bench's marks.
 
 import type { RegularDef, Roast } from '../sim/types';
 import { ALL_PIECES, PIECE_LABEL, type PieceKind } from '../game/pieces';
@@ -24,16 +26,38 @@ export const FLOOR_MARKS: string[] = [
   'A splash is an item spilled on that tick.',
 ];
 
+/** What a workbench bench's marks mean. */
+export const BENCH_MARKS: string[] = [
+  'Brass bolts in the corners: a piece that came with the bench. It stays where it is.',
+  'The tray takes one item a tick from any side. It rings gold when it takes something the order wants, and red when not.',
+  "A kettle's needle points at the tick its last input landed on. A roaster's tag counts the ticks its batch has been in; a spring's counts what is inside.",
+  'Splitter edges: yellow for its outputs, green where the next item goes, red where it would spill.',
+  'A splash is an item spilled on that tick. Past the edge of the bench, or into a gap in it, an item spills.',
+];
+
+/** A drink, or anything else wanted, to read up on: with who wants it. */
+export interface GuideDrink {
+  want: Ingredient;
+  key: string;
+  who: string[];
+}
+
 export interface GuideModel {
   unlocked: ReadonlySet<PieceKind>;
-  rowsLocked: boolean;
-  /** The regulars who have walked in, in order. */
-  regulars: readonly RegularDef[];
+  /** The pieces to list, in palette order: every piece when left out, still-locked ones as a question mark. */
+  pieces?: readonly PieceKind[];
+  /** Whether floor rows are for sale yet; null where there are none to buy, as on a bench. */
+  rowsLocked: boolean | null;
+  drinks: GuideDrink[];
+  /** What the floor's marks mean: the shop's when left out. */
+  marks?: string[];
+  /** Building costs nothing here: no prices. */
+  free?: boolean;
 }
 
 /** Each drink ordered by these regulars, once, with who orders it. */
-export function drinksOrdered(regulars: readonly RegularDef[]): { want: Ingredient; key: string; who: string[] }[] {
-  const out = new Map<string, { want: Ingredient; key: string; who: string[] }>();
+export function drinksOrdered(regulars: readonly RegularDef[]): GuideDrink[] {
+  const out = new Map<string, GuideDrink>();
   for (const def of regulars) {
     const roast: Roast | null = def.order.roast === 'any' ? null : def.order.roast;
     const key = `drink:${def.order.drink}:${def.order.roast}`;
@@ -50,20 +74,21 @@ export class Guide {
   private entries = new Map<string, HTMLDetailsElement>();
 
   update(m: GuideModel): void {
-    const key = JSON.stringify([[...m.unlocked].sort(), m.rowsLocked, m.regulars.map((d) => d.id)]);
+    const key = JSON.stringify([[...m.unlocked].sort(), m.pieces, m.rowsLocked, m.drinks.map((d) => [d.key, d.who]), m.free]);
     if (key === this.shown) return;
     this.shown = key;
     // Keep open whatever the player had open.
     const open = new Set([...this.entries].filter(([, d]) => d.open).map(([k]) => k));
     this.entries.clear();
-    const pieces = ALL_PIECES.map((piece) =>
+    const pieces = (m.pieces ?? ALL_PIECES).map((piece) =>
       m.unlocked.has(piece)
-        ? this.entry(`piece:${piece}`, spriteImg(PIECE_ICON[piece], 30), PIECE_LABEL[piece], coins(PIECE_PRICE[piece]), pieceBody(piece))
+        ? this.entry(`piece:${piece}`, spriteImg(PIECE_ICON[piece], 30), PIECE_LABEL[piece], m.free ? '' : coins(PIECE_PRICE[piece]), pieceBody(piece, m.free))
         : el('div', { className: 'guide-locked' }, el('span', { className: 'guide-q' }, '?'), el('span', { className: 'muted' }, LOCKED_LINE)),
     );
-    const drinks = drinksOrdered(m.regulars).map((d) =>
+    const drinks = m.drinks.map((d) =>
       this.entry(d.key, spriteImg(drinkSprite(d.want), 30), drinkTitle(d.want), `for ${d.who.join(', ')}`, orderBody(d.want)),
     );
+    const rows = m.rowsLocked === null ? [] : [this.entry('rows', null, 'Floor rows', m.rowsLocked ? 'not for sale yet' : coins(FLOOR_ROW_PRICE), rowBody(m.rowsLocked))];
     this.root.replaceChildren(
       el('p', { className: 'muted' }, 'Everything the tooltips say. Open an entry to read it.'),
       el('h3', { className: 'guide-head' }, 'Pieces'),
@@ -71,8 +96,8 @@ export class Guide {
       el('h3', { className: 'guide-head' }, 'Drinks'),
       ...(drinks.length ? drinks : [el('p', { className: 'muted' }, 'No regular has ordered yet.')]),
       el('h3', { className: 'guide-head' }, 'The floor'),
-      this.entry('rows', null, 'Floor rows', m.rowsLocked ? 'not for sale yet' : coins(FLOOR_ROW_PRICE), rowBody(m.rowsLocked)),
-      this.entry('marks', null, 'Reading the floor', '', [el('ul', { className: 'tip-rules' }, ...FLOOR_MARKS.map((t) => el('li', {}, t)))]),
+      ...rows,
+      this.entry('marks', null, 'Reading the floor', '', [el('ul', { className: 'tip-rules' }, ...(m.marks ?? FLOOR_MARKS).map((t) => el('li', {}, t)))]),
     );
     for (const k of open) {
       const d = this.entries.get(k);

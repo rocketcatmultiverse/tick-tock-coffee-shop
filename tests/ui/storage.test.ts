@@ -4,7 +4,8 @@ import { decodeShare, encodeShare, shareOf, visitShop } from '../../src/game/sha
 import { Shop } from '../../src/game/shop';
 import { SAVE_SLOTS } from '../../src/game/tuning';
 import { REGULARS } from '../../src/levels/regulars';
-import { SLOTS, clearSlot, migrateLegacySave, openSlot, readSlot, slotKey, writeSave, writeSlot } from '../../src/ui/storage';
+import type { Structure } from '../../src/sim/types';
+import { SLOTS, clearSlot, migrateLegacySave, openSlot, readSlot, slotKey, writeBench, writeSave, writeSlot } from '../../src/ui/storage';
 
 /** localStorage, in memory. */
 function memoryStorage() {
@@ -147,4 +148,21 @@ describe('The saves in the browser', () => {
     expect(importText('{"version": 1}', REGULARS)).toBeNull();
     expect(importText(JSON.stringify({ ...saveShop(named('x'), 0), tutorialSeen: 'yes' }), REGULARS)).toBeNull();
   });
+
+  it('keeps a workbench puzzle’s progress in its shop’s slot, leaving the rest of the save as it was (Q77)', () => {
+    const shop = named('The Night Owl');
+    writeSlot(false, 2, saveShop(shop, 1234));
+    const before = readSlot(REGULARS, false, 2);
+    const bench = { solved: ['basics-water'], floors: { 'basics-beans': [[13, { kind: 'plot', out: 'E' }]] as [number, Structure][] } };
+    expect(writeBench(REGULARS, false, 2, bench)).toBe(true);
+    const after = readSlot(REGULARS, false, 2);
+    if (before.kind !== 'save' || after.kind !== 'save') throw new Error('no save');
+    // Time at the bench is time away from the shop: lastSeen does not move.
+    expect(after.save).toEqual({ ...before.save, bench });
+    expect(after.save.lastSeen).toBe(1234);
+    // There is no shop in an empty slot to keep it in.
+    expect(writeBench(REGULARS, false, 3, bench)).toBe(false);
+    expect(readSlot(REGULARS, false, 3).kind).toBe('empty');
+  });
 });
+

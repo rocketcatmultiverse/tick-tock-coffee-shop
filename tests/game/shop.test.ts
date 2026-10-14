@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Shop } from '../../src/game/shop';
+import { Shop, walkInNote } from '../../src/game/shop';
 import { REGULARS } from '../../src/levels/regulars';
 import { REFERENCE_LAYOUTS } from '../../src/levels/layouts';
 import { parseLayout, renderFloor } from '../../src/sim/text';
@@ -48,18 +48,23 @@ describe('Shop', () => {
     const shop = new Shop({ defs: REGULARS.slice(0, 4) });
     shop.till = 1000;
     expect(shop.build(layoutChanges('all-four')).ok).toBe(true);
-    const walkIns: { at: number; id: string; unlocked: string[]; wellLimit: number | null }[] = [];
+    const walkIns: { at: number; id: string; unlocked: string[]; wellLimit: number | null; ladders: string[]; note: string }[] = [];
     for (let k = 0; k < 120; k++) {
       const before = shop.regulars.length;
       const report = shop.tick();
       // A report names a walk-in exactly when the regulars grow.
       expect(report.walkedIn !== null, `tick ${report.T}`).toBe(shop.regulars.length > before);
-      if (report.walkedIn) walkIns.push({ at: report.T, id: report.walkedIn.def.id, unlocked: report.walkedIn.unlocked, wellLimit: report.walkedIn.wellLimit });
+      const w = report.walkedIn;
+      if (w) walkIns.push({ at: report.T, id: w.def.id, unlocked: w.unlocked, wellLimit: w.wellLimit, ladders: w.ladders, note: walkInNote(w) });
     }
     expect(walkIns.map((w) => w.id)).toEqual(['sweep', 'clockmaker', 'gargoyle']);
     expect(walkIns.find((w) => w.id === 'clockmaker')!.unlocked).toEqual(['spring']);
     expect(walkIns.find((w) => w.id === 'sweep')!.unlocked).toEqual([]);
     expect(walkIns.every((w) => w.wellLimit === null)).toBe(true);
+    // The spring opens a ladder of workbench puzzles too, and the happenings say so (Q77).
+    expect(walkIns.map((w) => w.ladders)).toEqual([[], ['spring'], []]);
+    expect(walkIns.find((w) => w.id === 'clockmaker')!.note).toContain('New at the workbench: spring puzzles.');
+    expect(walkIns.find((w) => w.id === 'sweep')!.note).not.toContain('workbench');
   });
 
   it('pays the plain price, the Just in Time bonus, and the clockmaker in gears', () => {
